@@ -16,6 +16,7 @@ builder.Services.Configure<VideoStorageSettings>(
     builder.Configuration.GetSection("VideoStorage"));
 
 // Add application services
+builder.Services.AddSingleton<VideoDatabaseService>();
 builder.Services.AddSingleton<VideoConversionService>();
 builder.Services.AddSingleton<StreamDownloadService>();
 builder.Services.AddSingleton<VideoArchiveService>();

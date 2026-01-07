@@ -11,15 +11,16 @@ public partial class VideoConversionService
 {
     private readonly VideoStorageSettings _settings;
     private readonly ILogger<VideoConversionService> _logger;
+    private readonly VideoDatabaseService _db;
     private readonly Dictionary<string, (Process Process, CancellationTokenSource Cts)> _activeConversions = new();
-    private readonly Dictionary<string, ConversionJob> _conversionJobs = new();
 
     public event EventHandler<ConversionJob>? ConversionUpdated;
 
-    public VideoConversionService(IOptions<VideoStorageSettings> settings, ILogger<VideoConversionService> logger)
+    public VideoConversionService(IOptions<VideoStorageSettings> settings, ILogger<VideoConversionService> logger, VideoDatabaseService db)
     {
         _settings = settings.Value;
         _logger = logger;
+        _db = db;
 
         // Log loaded settings for diagnostics
         _logger.LogInformation("VideoConversionService initialized with settings:");
@@ -38,7 +39,18 @@ public partial class VideoConversionService
         Directory.CreateDirectory(_settings.ThumbnailDirectory);
     }
 
-    public IEnumerable<ConversionJob> GetActiveConversions() => _conversionJobs.Values;
+    public IEnumerable<ConversionJob> GetActiveConversions() => _db.GetActiveConversionJobs();
+
+    public ConversionJob? GetConversionByDownloadJobId(string downloadJobId)
+    {
+        return _db.GetConversionByDownloadJobId(downloadJobId);
+    }
+
+    public void RemoveConversionJob(string jobId)
+    {
+        _db.DeleteConversionJob(jobId);
+        _logger.LogInformation("Removed conversion job {JobId} from database", jobId);
+    }
 
     public async Task<ConversionJob> StartConversionAsync(DownloadJob downloadJob)
     {
@@ -55,7 +67,7 @@ public partial class VideoConversionService
         var fileName = Path.GetFileNameWithoutExtension(downloadJob.OutputPath);
         job.OutputPath = Path.Combine(_settings.ConvertedDirectory, $"{fileName}.{_settings.ConversionOutputFormat}");
 
-        _conversionJobs[job.Id] = job;
+        _db.UpsertConversionJob(job);
         NotifyConversionUpdated(job);
 
         var cts = new CancellationTokenSource();
@@ -161,20 +173,24 @@ public partial class VideoConversionService
                 {
                     try { File.Delete(job.OutputPath); } catch { }
                 }
+
+                // Update the corresponding DownloadJob status
+                UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, "Conversion cancelled", null, null);
             }
             else if (process.ExitCode == 0 && File.Exists(job.OutputPath))
             {
                 job.Status = ConversionStatus.Completed;
                 job.Progress = 100;
 
-                // Generate thumbnail for the converted video
+                // Generate thumbnails for the converted video
+                List<string>? thumbnailFileNames = null;
                 try
                 {
-                    var thumbnailFileName = await GenerateThumbnailAsync(job.OutputPath, job.Id);
-                    if (thumbnailFileName != null)
+                    thumbnailFileNames = await GenerateMultipleThumbnailsAsync(job.OutputPath, job.Id);
+                    if (thumbnailFileNames != null && thumbnailFileNames.Any())
                     {
-                        _logger.LogInformation("Thumbnail generated for conversion job {JobId}: {ThumbnailFileName}",
-                            job.Id, thumbnailFileName);
+                        _logger.LogInformation("Generated {Count} thumbnails for conversion job {JobId}",
+                            thumbnailFileNames.Count, job.Id);
                     }
                 }
                 catch (Exception ex)
@@ -182,11 +198,17 @@ public partial class VideoConversionService
                     _logger.LogError(ex, "Failed to generate thumbnail for conversion job {JobId}", job.Id);
                     // Don't fail the conversion if thumbnail generation fails
                 }
+
+                // Update the corresponding DownloadJob status
+                UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionCompleted, null, thumbnailFileNames, job.OutputPath);
             }
             else
             {
                 job.Status = ConversionStatus.Failed;
                 job.ErrorMessage = $"Conversion failed with exit code {process.ExitCode}";
+
+                // Update the corresponding DownloadJob status
+                UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, job.ErrorMessage, null, null);
             }
 
             NotifyConversionUpdated(job);
@@ -197,8 +219,44 @@ public partial class VideoConversionService
             _logger.LogError(ex, "Error executing conversion for job {JobId}", job.Id);
             job.Status = ConversionStatus.Failed;
             job.ErrorMessage = ex.Message;
+
+            // Update the corresponding DownloadJob status
+            UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, ex.Message, null, null);
+
             NotifyConversionUpdated(job);
             _activeConversions.Remove(job.Id);
+        }
+    }
+
+    private void UpdateDownloadJobAfterConversion(string downloadJobId, DownloadStatus status, string? errorMessage, List<string>? thumbnails, string? convertedFilePath)
+    {
+        try
+        {
+            var downloadJob = _db.GetDownloadJob(downloadJobId);
+            if (downloadJob != null)
+            {
+                downloadJob.Status = status;
+                downloadJob.ErrorMessage = errorMessage;
+                downloadJob.ConvertedFilePath = convertedFilePath;
+
+                if (thumbnails != null && thumbnails.Any())
+                {
+                    downloadJob.Thumbnails = thumbnails;
+                    downloadJob.Thumbnail = thumbnails.First();
+                }
+
+                _db.UpsertDownloadJob(downloadJob);
+                _logger.LogInformation("Updated DownloadJob {JobId} status to {Status}, ConvertedFilePath: {ConvertedFilePath}",
+                    downloadJobId, status, convertedFilePath ?? "null");
+            }
+            else
+            {
+                _logger.LogWarning("Could not find DownloadJob {JobId} to update after conversion", downloadJobId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating DownloadJob {JobId} after conversion", downloadJobId);
         }
     }
 
@@ -302,6 +360,7 @@ public partial class VideoConversionService
 
     private void NotifyConversionUpdated(ConversionJob job)
     {
+        _db.UpsertConversionJob(job);
         ConversionUpdated?.Invoke(this, job);
     }
 

@@ -309,18 +309,12 @@
         </MudPaper>
     }
 
-    @{
-        var convertedVideos = _activeDownloads
-            .Where(d => d.Status == DownloadStatus.ConversionCompleted || d.Status == DownloadStatus.ConversionFailed)
-            .ToList();
-    }
-
-    @if (convertedVideos.Any())
+    @if (_convertedDownloads.Any())
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-bottom: 20px;">
             <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Color="Color.Success"/>
             <MudText Typo="Typo.h5" Style="font-weight: 600; margin: 0;">Converted Videos</MudText>
-            <MudChip T="string" Size="Size.Small" Color="Color.Success">@convertedVideos.Count</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Success">@_convertedDownloads.Count</MudChip>
         </MudStack>
         <MudPaper Elevation="0"
                   Style="background: rgba(255, 255, 255, 0.02);
@@ -329,7 +323,7 @@
                          margin-bottom: 32px;
                          border: 1px solid rgba(61, 203, 108, 0.15);">
             <MudStack Spacing="3">
-                @foreach (var job in convertedVideos)
+                @foreach (var job in _convertedDownloads)
                 {
                     <MudCard Elevation="0"
                              Style="background: linear-gradient(135deg, rgba(61, 203, 108, 0.08) 0%, rgba(126, 111, 255, 0.05) 100%);
@@ -403,6 +397,19 @@
                                             Archive
                                         </MudButton>
                                         <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Error"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => DeleteConvertedVideo(job)"
+                                                   StartIcon="@Icons.Material.Filled.Delete"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Delete
+                                        </MudButton>
+                                    </MudStack>
+                                }
+                                @if (job.Status == DownloadStatus.ConversionFailed)
+                                {
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudButton Variant="Variant.Filled"
                                                    Color="Color.Error"
                                                    Size="Size.Medium"
                                                    OnClick="() => DeleteConvertedVideo(job)"
@@ -562,29 +569,32 @@
     private string _newStreamUrl = string.Empty;
     private string _selectedResolution = "Best";
     private List<DownloadJob> _activeDownloads = new();
+    private List<DownloadJob> _convertedDownloads = new();
     private List<ConversionJob> _activeConversions = new();
     private List<ArchivedVideo> _archivedVideos = new();
 
     protected override async Task OnInitializedAsync()
     {
-        _activeDownloads = DownloadService.GetActiveDownloads().ToList();
-        _activeConversions = ConversionService.GetActiveConversions().ToList();
-        _archivedVideos = (await ArchiveService.GetArchivedVideosAsync()).ToList();
+        RefreshData();
 
         DownloadService.DownloadUpdated += OnDownloadUpdated;
         ConversionService.ConversionUpdated += OnConversionUpdated;
         ArchiveService.ArchiveUpdated += OnArchiveUpdated;
     }
 
+    private void RefreshData()
+    {
+        _activeDownloads = DownloadService.GetActiveDownloads().ToList();
+        _convertedDownloads = DownloadService.GetConvertedJobs().ToList();
+        _activeConversions = ConversionService.GetActiveConversions().ToList();
+        _archivedVideos = ArchiveService.GetArchivedVideosAsync().Result.ToList();
+    }
+
     private async void OnDownloadUpdated(object? sender, DownloadJob job)
     {
         await InvokeAsync(() =>
         {
-            var existing = _activeDownloads.FirstOrDefault(d => d.Id == job.Id);
-            if (existing == null)
-            {
-                _activeDownloads.Add(job);
-            }
+            RefreshData();
             StateHasChanged();
         });
     }
@@ -593,33 +603,16 @@
     {
         await InvokeAsync(() =>
         {
-            var existing = _activeConversions.FirstOrDefault(c => c.Id == job.Id);
-            if (existing == null)
-            {
-                _activeConversions.Add(job);
-            }
-
-            // Update corresponding download job status if it exists
-            var downloadJob = _activeDownloads.FirstOrDefault(d => d.Id == job.DownloadJobId);
-            if (downloadJob != null && job.Status == ConversionStatus.Completed)
-            {
-                downloadJob.Status = DownloadStatus.ConversionCompleted;
-            }
-            else if (downloadJob != null && job.Status == ConversionStatus.Failed)
-            {
-                downloadJob.Status = DownloadStatus.ConversionFailed;
-                downloadJob.ErrorMessage = job.ErrorMessage;
-            }
-
+            RefreshData();
             StateHasChanged();
         });
     }
 
     private async void OnArchiveUpdated(object? sender, EventArgs e)
     {
-        await InvokeAsync(async () =>
+        await InvokeAsync(() =>
         {
-            _archivedVideos = (await ArchiveService.GetArchivedVideosAsync()).ToList();
+            RefreshData();
             StateHasChanged();
         });
     }
@@ -659,7 +652,8 @@
         try
         {
             await ArchiveService.ArchiveVideoAsync(job);
-            _activeDownloads.Remove(job);
+            DownloadService.RemoveDownloadJob(job.Id);
+            RefreshData();
             Snackbar.Add("Video archived successfully", Severity.Success);
         }
         catch (Exception ex)
@@ -709,9 +703,8 @@
 
     private async Task PlayConvertedVideo(DownloadJob job)
     {
-        // Find the converted file
-        var conversion = _activeConversions.FirstOrDefault(c => c.DownloadJobId == job.Id && c.Status == ConversionStatus.Completed);
-        if (conversion == null || !File.Exists(conversion.OutputPath))
+        // Check if converted file path exists
+        if (string.IsNullOrEmpty(job.ConvertedFilePath) || !File.Exists(job.ConvertedFilePath))
         {
             Snackbar.Add("Converted file not found", Severity.Error);
             return;
@@ -720,10 +713,12 @@
         // Create a temporary ArchivedVideo object for the player dialog
         var video = new ArchivedVideo
         {
-            Title = conversion.Title,
-            FileName = Path.GetFileName(conversion.OutputPath),
-            OriginalUrl = conversion.OriginalUrl,
-            FilePath = conversion.OutputPath
+            Title = job.Title,
+            FileName = Path.GetFileName(job.ConvertedFilePath),
+            OriginalUrl = job.Url,
+            FilePath = job.ConvertedFilePath,
+            Thumbnail = job.Thumbnail,
+            Thumbnails = job.Thumbnails
         };
 
         var parameters = new DialogParameters
@@ -745,9 +740,8 @@
     {
         try
         {
-            // Find the converted file
-            var conversion = _activeConversions.FirstOrDefault(c => c.DownloadJobId == job.Id && c.Status == ConversionStatus.Completed);
-            if (conversion == null || !File.Exists(conversion.OutputPath))
+            // Check if converted file path exists
+            if (string.IsNullOrEmpty(job.ConvertedFilePath) || !File.Exists(job.ConvertedFilePath))
             {
                 Snackbar.Add("Converted file not found", Severity.Error);
                 return;
@@ -757,7 +751,7 @@
             var originalFilePath = job.OutputPath;
 
             // Update the job's OutputPath to point to the converted file
-            job.OutputPath = conversion.OutputPath;
+            job.OutputPath = job.ConvertedFilePath;
 
             await ArchiveService.ArchiveVideoAsync(job);
 
@@ -774,12 +768,18 @@
                 }
             }
 
-            // Remove from active downloads and conversions
-            _activeDownloads.Remove(job);
-            _activeConversions.Remove(conversion);
+            // Remove from database
+            DownloadService.RemoveDownloadJob(job.Id);
 
+            // Clean up conversion job if it exists
+            var conversion = ConversionService.GetConversionByDownloadJobId(job.Id);
+            if (conversion != null)
+            {
+                ConversionService.RemoveConversionJob(conversion.Id);
+            }
+
+            RefreshData();
             Snackbar.Add("Video archived successfully", Severity.Success);
-            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -799,11 +799,10 @@
         {
             try
             {
-                // Find and delete the converted file
-                var conversion = _activeConversions.FirstOrDefault(c => c.DownloadJobId == job.Id);
-                if (conversion != null && File.Exists(conversion.OutputPath))
+                // Delete the converted file if it exists
+                if (!string.IsNullOrEmpty(job.ConvertedFilePath) && File.Exists(job.ConvertedFilePath))
                 {
-                    File.Delete(conversion.OutputPath);
+                    File.Delete(job.ConvertedFilePath);
                 }
 
                 // Delete original download file if it exists
@@ -812,15 +811,35 @@
                     File.Delete(job.OutputPath);
                 }
 
-                // Remove from lists
-                _activeDownloads.Remove(job);
-                if (conversion != null)
+                // Delete thumbnails if they exist
+                foreach (var thumbnailFileName in job.Thumbnails)
                 {
-                    _activeConversions.Remove(conversion);
+                    var thumbnailPath = Path.Combine("wwwroot/thumbnails", thumbnailFileName);
+                    if (File.Exists(thumbnailPath))
+                    {
+                        try
+                        {
+                            File.Delete(thumbnailPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete thumbnail {ThumbnailPath}", thumbnailPath);
+                        }
+                    }
                 }
 
+                // Remove from database
+                DownloadService.RemoveDownloadJob(job.Id);
+
+                // Clean up conversion job if it exists
+                var conversion = ConversionService.GetConversionByDownloadJobId(job.Id);
+                if (conversion != null)
+                {
+                    ConversionService.RemoveConversionJob(conversion.Id);
+                }
+
+                RefreshData();
                 Snackbar.Add("Video deleted successfully", Severity.Success);
-                StateHasChanged();
             }
             catch (Exception ex)
             {

@@ -12,18 +12,20 @@ public partial class StreamDownloadService
     private readonly VideoStorageSettings _settings;
     private readonly ILogger<StreamDownloadService> _logger;
     private readonly VideoConversionService _conversionService;
+    private readonly VideoDatabaseService _db;
     private readonly Dictionary<string, (Process Process, CancellationTokenSource Cts)> _activeDownloads = new();
-    private readonly Dictionary<string, DownloadJob> _downloadJobs = new();
 
     public event EventHandler<DownloadJob>? DownloadUpdated;
 
     public StreamDownloadService(
         IOptions<VideoStorageSettings> settings,
         ILogger<StreamDownloadService> logger,
+        VideoDatabaseService db,
         VideoConversionService conversionService)
     {
         _settings = settings.Value;
         _logger = logger;
+        _db = db;
         _conversionService = conversionService;
 
         // Ensure directories exist
@@ -31,7 +33,15 @@ public partial class StreamDownloadService
         Directory.CreateDirectory(_settings.ArchiveDirectory);
     }
 
-    public IEnumerable<DownloadJob> GetActiveDownloads() => _downloadJobs.Values;
+    public IEnumerable<DownloadJob> GetActiveDownloads() => _db.GetActiveDownloadJobs();
+
+    public IEnumerable<DownloadJob> GetConvertedJobs() => _db.GetConvertedJobs();
+
+    public void RemoveDownloadJob(string jobId)
+    {
+        _db.DeleteDownloadJob(jobId);
+        _logger.LogInformation("Removed download job {JobId} from database", jobId);
+    }
 
     public async Task<DownloadJob> StartDownloadAsync(string url, string resolution = "Best")
     {
@@ -42,7 +52,7 @@ public partial class StreamDownloadService
             Status = DownloadStatus.Starting
         };
 
-        _downloadJobs[job.Id] = job;
+        _db.UpsertDownloadJob(job);
         NotifyDownloadUpdated(job);
 
         var cts = new CancellationTokenSource();
@@ -257,6 +267,7 @@ public partial class StreamDownloadService
 
     private void NotifyDownloadUpdated(DownloadJob job)
     {
+        _db.UpsertDownloadJob(job);
         DownloadUpdated?.Invoke(this, job);
     }
 

@@ -1,7 +1,10 @@
+using LiteDB;
+
 namespace SDL.Models;
 
 public class ArchivedVideo
 {
+    [BsonId]
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Title { get; set; } = string.Empty;
     public string OriginalUrl { get; set; } = string.Empty;
@@ -15,6 +18,7 @@ public class ArchivedVideo
     public string? Description { get; set; }
     public string? Uploader { get; set; }
 
+    [BsonIgnore]
     public string FileSizeFormatted => FormatFileSize(FileSizeBytes);
 
     private static string FormatFileSize(long bytes)
