@@ -1,0 +1,184 @@
+@using SDL.Models
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h6">@Video?.Title</MudText>
+
+            @if (Video != null && GetThumbnails().Any())
+            {
+                <!-- Main Thumbnail Display -->
+                <MudPaper Elevation="4" Style="background: black; border-radius: 12px; overflow: hidden;">
+                    <img src="/thumbnails/@GetThumbnails()[_currentIndex]"
+                         alt="@Video.Title"
+                         style="width: 100%; height: auto; max-height: 60vh; object-fit: contain; display: block;" />
+                </MudPaper>
+
+                <!-- Navigation Controls -->
+                <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                                   Color="Color.Primary"
+                                   Size="Size.Large"
+                                   OnClick="PreviousThumbnail"
+                                   Disabled="@(_currentIndex == 0)"
+                                   Style="background: rgba(126, 111, 255, 0.1); border-radius: 50%;" />
+
+                    <MudText Typo="Typo.body1" Style="font-weight: 500; min-width: 100px; text-align: center;">
+                        @(_currentIndex + 1) of @GetThumbnails().Count
+                    </MudText>
+
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                                   Color="Color.Primary"
+                                   Size="Size.Large"
+                                   OnClick="NextThumbnail"
+                                   Disabled="@(_currentIndex >= GetThumbnails().Count - 1)"
+                                   Style="background: rgba(126, 111, 255, 0.1); border-radius: 50%;" />
+                </MudStack>
+
+                <!-- Thumbnail Strip -->
+                <MudPaper Elevation="0"
+                          Style="background: rgba(255, 255, 255, 0.02);
+                                 border-radius: 12px;
+                                 padding: 12px;
+                                 border: 1px solid rgba(126, 111, 255, 0.1);">
+                    <MudStack Row="true" Justify="Justify.Center" Spacing="2" Style="overflow-x: auto;">
+                        @for (int i = 0; i < GetThumbnails().Count; i++)
+                        {
+                            var index = i; // Capture for closure
+                            var isSelected = index == _currentIndex;
+                            <div @onclick="() => SelectThumbnail(index)"
+                                 style="cursor: pointer;
+                                        border: @(isSelected ? "3px solid #7e6fff" : "2px solid rgba(126, 111, 255, 0.3)");
+                                        border-radius: 8px;
+                                        overflow: hidden;
+                                        transition: all 0.2s ease;
+                                        opacity: @(isSelected ? "1" : "0.6");
+                                        transform: @(isSelected ? "scale(1.1)" : "scale(1)");
+                                        background: black;
+                                        width: 120px;
+                                        height: 68px;
+                                        flex-shrink: 0;">
+                                <img src="/thumbnails/@GetThumbnails()[index]"
+                                     alt="Thumbnail @(index + 1)"
+                                     style="width: 100%; height: 100%; object-fit: cover;" />
+                            </div>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Video Info -->
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body2">
+                        <strong>File:</strong> @Video.FileName
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Size:</strong> @Video.FileSizeFormatted
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(Video.Duration))
+                    {
+                        <MudText Typo="Typo.body2">
+                            <strong>Duration:</strong> @Video.Duration
+                        </MudText>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">No thumbnails available for this video.</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (Video != null && GetThumbnails().Any())
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                       OnClick="PlayVideo"
+                       Style="background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%); border-radius: 8px;">
+                Play Video
+            </MudButton>
+        }
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IDialogReference? MudDialog { get; set; }
+
+    [Parameter]
+    public ArchivedVideo? Video { get; set; }
+
+    [Inject]
+    private IDialogService? DialogService { get; set; }
+
+    private int _currentIndex = 0;
+
+    private List<string> GetThumbnails()
+    {
+        if (Video == null)
+            return new List<string>();
+
+        // Use Thumbnails list if available, otherwise fall back to single Thumbnail
+        if (Video.Thumbnails?.Any() == true)
+            return Video.Thumbnails;
+
+        if (!string.IsNullOrEmpty(Video.Thumbnail))
+            return new List<string> { Video.Thumbnail };
+
+        return new List<string>();
+    }
+
+    private void NextThumbnail()
+    {
+        var thumbnails = GetThumbnails();
+        if (_currentIndex < thumbnails.Count - 1)
+        {
+            _currentIndex++;
+        }
+    }
+
+    private void PreviousThumbnail()
+    {
+        if (_currentIndex > 0)
+        {
+            _currentIndex--;
+        }
+    }
+
+    private void SelectThumbnail(int index)
+    {
+        _currentIndex = index;
+    }
+
+    private async Task PlayVideo()
+    {
+        if (Video == null || DialogService == null)
+            return;
+
+        // Close current dialog
+        MudDialog?.Close();
+
+        // Open video player dialog
+        var parameters = new DialogParameters
+        {
+            { nameof(VideoPlayerDialog.Video), Video }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<VideoPlayerDialog>("Play Video", parameters, options);
+    }
+
+    private void Close()
+    {
+        MudDialog?.Close();
+    }
+}

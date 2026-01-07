@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  sdl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sdl-app
+    ports:
+      - "8347:8080"
+    volumes:
+      - ./data/downloads:/app/wwwroot/downloads
+      - ./data/converted:/app/wwwroot/converted
+      - ./data/archives:/app/wwwroot/archives
+      - ./data/thumbnails:/app/wwwroot/thumbnails
+      - ./data/metadata:/app/metadata
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+    restart: unless-stopped

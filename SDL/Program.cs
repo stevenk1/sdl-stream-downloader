@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Hosting;
 using MudBlazor.Services;
 using SDL.Components;
 using SDL.Configuration;
 using SDL.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.UseStaticWebAssets();
 
 // Add MudBlazor services
 builder.Services.AddMudServices();

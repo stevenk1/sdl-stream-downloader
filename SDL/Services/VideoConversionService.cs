@@ -307,6 +307,12 @@ public partial class VideoConversionService
 
     public async Task<string?> GenerateThumbnailAsync(string videoPath, string thumbnailId)
     {
+        var thumbnails = await GenerateMultipleThumbnailsAsync(videoPath, thumbnailId);
+        return thumbnails?.FirstOrDefault();
+    }
+
+    public async Task<List<string>?> GenerateMultipleThumbnailsAsync(string videoPath, string thumbnailId)
+    {
         try
         {
             // Get video duration first
@@ -317,59 +323,65 @@ public partial class VideoConversionService
                 return null;
             }
 
-            // Extract thumbnail at 25% of video duration
-            var timestamp = duration.Value * 0.25;
+            // Generate thumbnails at 10%, 25%, 40%, 55%, 70%, 85% of video duration
+            var percentages = new[] { 0.10, 0.25, 0.40, 0.55, 0.70, 0.85 };
+            var generatedThumbnails = new List<string>();
 
-            // Generate output path
-            var thumbnailFileName = $"{thumbnailId}_thumb.jpg";
-            var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, thumbnailFileName);
-
-            // Build FFmpeg command to extract a single frame
-            var args = $"-ss {timestamp.ToString(CultureInfo.InvariantCulture)} " +
-                      $"-i \"{videoPath}\" " +
-                      $"-vframes 1 " +
-                      $"-vf scale=320:-1 " +
-                      $"-q:v 2 " +
-                      $"-y " +
-                      $"\"{thumbnailPath}\"";
-
-            _logger.LogInformation("Generating thumbnail: {FfmpegPath} {Args}", _settings.FfmpegPath, args);
-
-            var processInfo = new ProcessStartInfo
+            for (int i = 0; i < percentages.Length; i++)
             {
-                FileName = _settings.FfmpegPath,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+                var timestamp = duration.Value * percentages[i];
+                var thumbnailFileName = $"{thumbnailId}_thumb_{i + 1:D2}.jpg";
+                var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, thumbnailFileName);
 
-            var process = Process.Start(processInfo);
-            if (process == null)
-            {
-                _logger.LogError("Failed to start ffmpeg process for thumbnail generation");
-                return null;
+                // Build FFmpeg command to extract a single frame
+                var args = $"-ss {timestamp.ToString(CultureInfo.InvariantCulture)} " +
+                          $"-i \"{videoPath}\" " +
+                          $"-vframes 1 " +
+                          $"-vf scale=1280:-1 " +
+                          $"-q:v 2 " +
+                          $"-y " +
+                          $"\"{thumbnailPath}\"";
+
+                _logger.LogInformation("Generating thumbnail {Index}/{Total}: {FfmpegPath} {Args}",
+                    i + 1, percentages.Length, _settings.FfmpegPath, args);
+
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = _settings.FfmpegPath,
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                var process = Process.Start(processInfo);
+                if (process == null)
+                {
+                    _logger.LogError("Failed to start ffmpeg process for thumbnail generation");
+                    continue;
+                }
+
+                await process.WaitForExitAsync();
+
+                if (process.ExitCode == 0 && File.Exists(thumbnailPath))
+                {
+                    _logger.LogInformation("Thumbnail generated successfully: {ThumbnailPath}", thumbnailPath);
+                    generatedThumbnails.Add(thumbnailFileName);
+                }
+                else
+                {
+                    var error = await process.StandardError.ReadToEndAsync();
+                    _logger.LogError("Thumbnail generation failed with exit code {ExitCode}. Error: {Error}",
+                        process.ExitCode, error);
+                }
             }
 
-            await process.WaitForExitAsync();
-
-            if (process.ExitCode == 0 && File.Exists(thumbnailPath))
-            {
-                _logger.LogInformation("Thumbnail generated successfully: {ThumbnailPath}", thumbnailPath);
-                return thumbnailFileName;
-            }
-            else
-            {
-                var error = await process.StandardError.ReadToEndAsync();
-                _logger.LogError("Thumbnail generation failed with exit code {ExitCode}. Error: {Error}",
-                    process.ExitCode, error);
-                return null;
-            }
+            return generatedThumbnails.Any() ? generatedThumbnails : null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating thumbnail for {VideoPath}", videoPath);
+            _logger.LogError(ex, "Error generating thumbnails for {VideoPath}", videoPath);
             return null;
         }
     }

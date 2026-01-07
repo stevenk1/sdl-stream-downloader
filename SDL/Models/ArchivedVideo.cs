@@ -10,6 +10,7 @@ public class ArchivedVideo
     public long FileSizeBytes { get; set; }
     public string? Duration { get; set; }
     public string? Thumbnail { get; set; }
+    public List<string> Thumbnails { get; set; } = new();
     public DateTime ArchivedAt { get; set; } = DateTime.Now;
     public string? Description { get; set; }
     public string? Uploader { get; set; }

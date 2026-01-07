@@ -340,9 +340,31 @@
                         <MudCardContent Style="padding: 24px;">
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudStack Spacing="1" Style="flex: 1;">
-                                        <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
-                                        <MudText Typo="Typo.body2" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex: 1;">
+                                        @if (!string.IsNullOrEmpty(job.Thumbnail) || job.Thumbnails?.Any() == true)
+                                        {
+                                            <div @onclick="() => ShowThumbnailGalleryForJob(job)"
+                                                 class="thumbnail-clickable"
+                                                 style="width: 80px;
+                                                       height: 45px;
+                                                       border-radius: 8px;
+                                                       overflow: hidden;
+                                                       border: 2px solid rgba(126, 111, 255, 0.3);
+                                                       background: black;
+                                                       cursor: pointer;
+                                                       transition: all 0.2s ease;"
+                                                 title="Click to view all thumbnails">
+                                                <img src="/thumbnails/@(job.Thumbnails?.FirstOrDefault() ?? job.Thumbnail)"
+                                                     alt="@job.Title"
+                                                     style="width: 100%;
+                                                            height: 100%;
+                                                            object-fit: cover;" />
+                                            </div>
+                                        }
+                                        <MudStack Spacing="1" Style="flex: 1;">
+                                            <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
+                                            <MudText Typo="Typo.body2" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
+                                        </MudStack>
                                     </MudStack>
                                     <MudChip T="string"
                                              Icon="@GetStatusIcon(job.Status)"
@@ -420,15 +442,20 @@
                 <PropertyColumn Property="x => x.Title" Title="Title" Filterable="true" Sortable="true">
                     <CellTemplate>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            @if (!string.IsNullOrEmpty(context.Item.Thumbnail))
+                            @if (!string.IsNullOrEmpty(context.Item.Thumbnail) || context.Item.Thumbnails?.Any() == true)
                             {
-                                <div style="width: 80px;
+                                <div @onclick="() => ShowThumbnailGallery(context.Item)"
+                                     class="thumbnail-clickable"
+                                     style="width: 80px;
                                            height: 45px;
                                            border-radius: 8px;
                                            overflow: hidden;
-                                           border: 1px solid rgba(126, 111, 255, 0.3);
-                                           background: black;">
-                                    <img src="/thumbnails/@context.Item.Thumbnail"
+                                           border: 2px solid rgba(126, 111, 255, 0.3);
+                                           background: black;
+                                           cursor: pointer;
+                                           transition: all 0.2s ease;"
+                                     title="Click to view all thumbnails">
+                                    <img src="/thumbnails/@(context.Item.Thumbnails?.FirstOrDefault() ?? context.Item.Thumbnail)"
                                          alt="@context.Item.Title"
                                          style="width: 100%;
                                                 height: 100%;
@@ -517,6 +544,12 @@
 
     .action-btn:hover {
         transform: scale(1.1);
+    }
+
+    .thumbnail-clickable:hover {
+        transform: scale(1.05);
+        border-color: #7e6fff !important;
+        box-shadow: 0 4px 12px rgba(126, 111, 255, 0.3);
     }
 
     .mud-table-row:hover {
@@ -841,6 +874,49 @@
         ConversionStatus.Failed => Icons.Material.Filled.Error,
         _ => Icons.Material.Filled.Circle
     };
+
+    private async Task ShowThumbnailGallery(ArchivedVideo video)
+    {
+        var parameters = new DialogParameters
+        {
+            { nameof(ThumbnailGalleryDialog.Video), video }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<ThumbnailGalleryDialog>("Thumbnail Gallery", parameters, options);
+    }
+
+    private async Task ShowThumbnailGalleryForJob(DownloadJob job)
+    {
+        // Create a temporary ArchivedVideo object for the gallery dialog
+        var video = new ArchivedVideo
+        {
+            Title = job.Title,
+            OriginalUrl = job.Url,
+            Thumbnail = job.Thumbnail,
+            Thumbnails = job.Thumbnails
+        };
+
+        var parameters = new DialogParameters
+        {
+            { nameof(ThumbnailGalleryDialog.Video), video }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<ThumbnailGalleryDialog>("Thumbnail Gallery", parameters, options);
+    }
 
     public void Dispose()
     {

@@ -13,6 +13,8 @@ public class DownloadJob
     public string OutputPath { get; set; } = string.Empty;
     public DateTime StartedAt { get; set; } = DateTime.Now;
     public string? ErrorMessage { get; set; }
+    public string? Thumbnail { get; set; }
+    public List<string> Thumbnails { get; set; } = new();
 }
 
 public enum DownloadStatus

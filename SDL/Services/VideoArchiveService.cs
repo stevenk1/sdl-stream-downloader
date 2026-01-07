@@ -80,20 +80,21 @@ public class VideoArchiveService
                 ArchivedAt = DateTime.Now
             };
 
-            // Generate thumbnail for the archived video
+            // Generate thumbnails for the archived video
             try
             {
-                var thumbnailFileName = await _conversionService.GenerateThumbnailAsync(archivePath, video.Id);
-                if (thumbnailFileName != null)
+                var thumbnailFileNames = await _conversionService.GenerateMultipleThumbnailsAsync(archivePath, video.Id);
+                if (thumbnailFileNames != null && thumbnailFileNames.Any())
                 {
-                    video.Thumbnail = thumbnailFileName;
-                    _logger.LogInformation("Thumbnail generated for archived video {VideoId}: {ThumbnailFileName}",
-                        video.Id, thumbnailFileName);
+                    video.Thumbnails = thumbnailFileNames;
+                    video.Thumbnail = thumbnailFileNames.First(); // Backward compatibility
+                    _logger.LogInformation("Generated {Count} thumbnails for archived video {VideoId}",
+                        thumbnailFileNames.Count, video.Id);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate thumbnail for archived video {VideoId}", video.Id);
+                _logger.LogError(ex, "Failed to generate thumbnails for archived video {VideoId}", video.Id);
                 // Don't fail the archiving if thumbnail generation fails
             }
 
@@ -124,17 +125,21 @@ public class VideoArchiveService
                 File.Delete(video.FilePath);
             }
 
-            // Delete thumbnail if it exists
-            if (!string.IsNullOrEmpty(video.Thumbnail))
+            // Delete all thumbnails if they exist
+            var thumbnailsToDelete = video.Thumbnails?.Any() == true
+                ? video.Thumbnails
+                : (!string.IsNullOrEmpty(video.Thumbnail) ? new List<string> { video.Thumbnail } : new List<string>());
+
+            foreach (var thumbnailFileName in thumbnailsToDelete)
             {
-                var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, video.Thumbnail);
+                var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, thumbnailFileName);
                 if (File.Exists(thumbnailPath))
                 {
                     try
                     {
                         File.Delete(thumbnailPath);
                         _logger.LogInformation("Deleted thumbnail for video {VideoId}: {ThumbnailFileName}",
-                            video.Id, video.Thumbnail);
+                            video.Id, thumbnailFileName);
                     }
                     catch (Exception ex)
                     {

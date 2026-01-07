@@ -4,3 +4,9 @@ SDL/obj
 SDL/wwwroot/archives
 SDL/wwwroot/converted
 SDL/wwwroot/downloads
+SDL/wwwroot/thumbnails
+SDL/wwwroot/.DS_Store
+.DS_Store
+SDL/wwwroot/thumbnails
+data/downloads
+SDL/wwwroot/thumbnails
