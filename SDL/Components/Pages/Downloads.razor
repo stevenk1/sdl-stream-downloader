@@ -1,0 +1,851 @@
+@page "/"
+@page "/downloads"
+@using SDL.Models
+@using SDL.Services
+@using SDL.Components.Dialogs
+@inject StreamDownloadService DownloadService
+@inject VideoConversionService ConversionService
+@inject VideoArchiveService ArchiveService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<Downloads> _logger
+@implements IDisposable
+
+<PageTitle>Downloads & Archive</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="margin-top: 0;">
+    <!-- Hero Section -->
+    <MudPaper Elevation="0"
+              Style="background: linear-gradient(135deg, rgba(126, 111, 255, 0.15) 0%, rgba(58, 134, 255, 0.1) 100%);
+                     border-radius: 24px;
+                     padding: 48px 36px;
+                     margin-bottom: 32px;
+                     border: 1px solid rgba(126, 111, 255, 0.2);
+                     backdrop-filter: blur(20px);">
+        <MudStack Spacing="4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <div style="width: 56px;
+                           height: 56px;
+                           background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%);
+                           border-radius: 16px;
+                           display: flex;
+                           align-items: center;
+                           justify-content: center;
+                           box-shadow: 0 8px 24px rgba(126, 111, 255, 0.4);">
+                    <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Large" Style="color: white;"/>
+                </div>
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.h3" Style="font-weight: 700; letter-spacing: -1px;">
+                        Download Streams
+                    </MudText>
+                    <MudText Typo="Typo.body1" Style="opacity: 0.8;">
+                        Capture and archive streams from Twitch, YouTube, and more
+                    </MudText>
+                </MudStack>
+            </MudStack>
+
+            <MudPaper Elevation="0"
+                      Style="background: rgba(255, 255, 255, 0.05);
+                             border-radius: 16px;
+                             padding: 24px;
+                             border: 1px solid rgba(255, 255, 255, 0.1);
+                             backdrop-filter: blur(10px);">
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End">
+                    <MudTextField @bind-Value="_newStreamUrl"
+                                  Label="Stream URL"
+                                  Placeholder="https://twitch.tv/streamer or youtube.com/watch?v=..."
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Immediate="true"
+                                  Style="flex: 1;"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Link"/>
+                    <MudSelect @bind-Value="_selectedResolution"
+                               Label="Quality"
+                               Variant="Variant.Outlined"
+                               Style="min-width: 140px;"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.HighQuality">
+                        <MudSelectItem Value="@("Best")">Best</MudSelectItem>
+                        <MudSelectItem Value="@("1080p")">1080p</MudSelectItem>
+                        <MudSelectItem Value="@("720p")">720p</MudSelectItem>
+                        <MudSelectItem Value="@("480p")">480p</MudSelectItem>
+                        <MudSelectItem Value="@("360p")">360p</MudSelectItem>
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="StartDownload"
+                               Disabled="string.IsNullOrWhiteSpace(_newStreamUrl)"
+                               StartIcon="@Icons.Material.Filled.Download"
+                               Size="Size.Large"
+                               Style="background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%);
+                                      border-radius: 12px;
+                                      padding: 12px 32px;
+                                      box-shadow: 0 8px 24px rgba(126, 111, 255, 0.4);
+                                      transition: all 0.3s ease;"
+                               Class="download-btn">
+                        Start Download
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    </MudPaper>
+
+    @{
+        var downloadingJobs = _activeDownloads
+            .Where(d => d.Status != DownloadStatus.Converting &&
+                        d.Status != DownloadStatus.ConversionCompleted &&
+                        d.Status != DownloadStatus.ConversionFailed)
+            .ToList();
+    }
+
+    @if (downloadingJobs.Any())
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-bottom: 20px;">
+            <MudIcon Icon="@Icons.Material.Filled.Download" Color="Color.Primary"/>
+            <MudText Typo="Typo.h5" Style="font-weight: 600; margin: 0;">Active Downloads</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@downloadingJobs.Count</MudChip>
+        </MudStack>
+        <MudPaper Elevation="0"
+                  Style="background: rgba(255, 255, 255, 0.02);
+                         border-radius: 20px;
+                         padding: 24px;
+                         margin-bottom: 32px;
+                         border: 1px solid rgba(126, 111, 255, 0.1);">
+            <MudStack Spacing="3">
+                @foreach (var job in downloadingJobs)
+                {
+                    <MudCard Elevation="0"
+                             Style="background: linear-gradient(135deg, rgba(126, 111, 255, 0.08) 0%, rgba(58, 134, 255, 0.05) 100%);
+                                    border-radius: 16px;
+                                    border: 1px solid rgba(126, 111, 255, 0.15);
+                                    transition: all 0.3s ease;"
+                             Class="modern-card">
+                        <MudCardContent Style="padding: 24px;">
+                            <MudStack Spacing="3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="1" Style="flex: 1;">
+                                        <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
+                                        <MudText Typo="Typo.body2" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
+                                    </MudStack>
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudChip T="string"
+                                                 Icon="@Icons.Material.Filled.HighQuality"
+                                                 Color="Color.Default"
+                                                 Size="Size.Small"
+                                                 Style="background: rgba(255, 255, 255, 0.1); border-radius: 8px;">
+                                            @job.Resolution
+                                        </MudChip>
+                                        <MudChip T="string"
+                                                 Icon="@GetStatusIcon(job.Status)"
+                                                 Color="GetStatusColor(job.Status)"
+                                                 Size="Size.Small"
+                                                 Style="border-radius: 8px; font-weight: 500;">
+                                            @job.Status.ToString()
+                                        </MudChip>
+                                    </MudStack>
+                                </MudStack>
+
+                                @if (job.Status == DownloadStatus.Downloading || job.Status == DownloadStatus.Processing)
+                                {
+                                    <MudStack Spacing="2">
+                                        <MudProgressLinear Value="@job.Progress"
+                                                          Color="Color.Primary"
+                                                          Size="Size.Large"
+                                                          Style="height: 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.2);"
+                                                          Class="modern-progress"/>
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            <MudStack Row="true" Spacing="3">
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.DataUsage" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@($"{job.Progress:F1}%")</MudText>
+                                                </MudStack>
+                                                @if (!string.IsNullOrEmpty(job.Speed))
+                                                {
+                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                        <MudText Typo="Typo.body2">@job.Speed</MudText>
+                                                    </MudStack>
+                                                }
+                                                @if (!string.IsNullOrEmpty(job.Eta))
+                                                {
+                                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                        <MudText Typo="Typo.body2">@job.Eta</MudText>
+                                                    </MudStack>
+                                                }
+                                            </MudStack>
+                                        </MudStack>
+                                    </MudStack>
+                                }
+
+                                @if (!string.IsNullOrEmpty(job.ErrorMessage))
+                                {
+                                    <MudAlert Severity="Severity.Error"
+                                              Style="border-radius: 12px; border-left: 4px solid #ff3f5f;">
+                                        @job.ErrorMessage
+                                    </MudAlert>
+                                }
+
+                                <MudStack Row="true" Spacing="2">
+                                    @if (job.Status == DownloadStatus.Downloading || job.Status == DownloadStatus.Processing)
+                                    {
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Warning"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => StopDownload(job.Id)"
+                                                   StartIcon="@Icons.Material.Filled.Stop"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Stop Download
+                                        </MudButton>
+                                    }
+                                    @if (job.Status == DownloadStatus.Completed || job.Status == DownloadStatus.Stopped)
+                                    {
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Success"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => ArchiveDownload(job)"
+                                                   StartIcon="@Icons.Material.Filled.Archive"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Archive Video
+                                        </MudButton>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    @if (_activeConversions.Any())
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-bottom: 20px;">
+            <MudIcon Icon="@Icons.Material.Filled.Transform" Color="Color.Info"/>
+            <MudText Typo="Typo.h5" Style="font-weight: 600; margin: 0;">Active Conversions</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Info">@_activeConversions.Count</MudChip>
+        </MudStack>
+        <MudPaper Elevation="0"
+                  Style="background: rgba(255, 255, 255, 0.02);
+                         border-radius: 20px;
+                         padding: 24px;
+                         margin-bottom: 32px;
+                         border: 1px solid rgba(74, 134, 255, 0.15);">
+            <MudStack Spacing="3">
+                @foreach (var job in _activeConversions)
+                {
+                    <MudCard Elevation="0"
+                             Style="background: linear-gradient(135deg, rgba(74, 134, 255, 0.08) 0%, rgba(126, 111, 255, 0.05) 100%);
+                                    border-radius: 16px;
+                                    border: 1px solid rgba(74, 134, 255, 0.15);
+                                    transition: all 0.3s ease;"
+                             Class="modern-card">
+                        <MudCardContent Style="padding: 24px;">
+                            <MudStack Spacing="3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="1" Style="flex: 1;">
+                                        <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
+                                    </MudStack>
+                                    <MudChip T="string"
+                                             Icon="@GetConversionStatusIcon(job.Status)"
+                                             Color="GetConversionStatusColor(job.Status)"
+                                             Size="Size.Small"
+                                             Style="border-radius: 8px; font-weight: 500;">
+                                        @job.Status.ToString()
+                                    </MudChip>
+                                </MudStack>
+
+                                @if (job.Status == ConversionStatus.Converting)
+                                {
+                                    <MudStack Spacing="2">
+                                        <MudProgressLinear Value="@job.Progress"
+                                                          Color="Color.Info"
+                                                          Size="Size.Large"
+                                                          Style="height: 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.2);"
+                                                          Class="modern-progress"/>
+                                        <MudStack Row="true" Spacing="3">
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                <MudIcon Icon="@Icons.Material.Filled.DataUsage" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                <MudText Typo="Typo.body2" Style="font-weight: 600;">@($"{job.Progress:F1}%")</MudText>
+                                            </MudStack>
+                                            @if (!string.IsNullOrEmpty(job.Fps))
+                                            {
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Videocam" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                    <MudText Typo="Typo.body2">@job.Fps FPS</MudText>
+                                                </MudStack>
+                                            }
+                                            @if (!string.IsNullOrEmpty(job.Speed))
+                                            {
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                    <MudText Typo="Typo.body2">@job.Speed</MudText>
+                                                </MudStack>
+                                            }
+                                            @if (!string.IsNullOrEmpty(job.Eta))
+                                            {
+                                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Style="opacity: 0.7;"/>
+                                                    <MudText Typo="Typo.body2">@job.Eta</MudText>
+                                                </MudStack>
+                                            }
+                                        </MudStack>
+                                    </MudStack>
+                                }
+
+                                @if (!string.IsNullOrEmpty(job.ErrorMessage))
+                                {
+                                    <MudAlert Severity="Severity.Error"
+                                              Style="border-radius: 12px; border-left: 4px solid #ff3f5f;">
+                                        @job.ErrorMessage
+                                    </MudAlert>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    @{
+        var convertedVideos = _activeDownloads
+            .Where(d => d.Status == DownloadStatus.ConversionCompleted || d.Status == DownloadStatus.ConversionFailed)
+            .ToList();
+    }
+
+    @if (convertedVideos.Any())
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-bottom: 20px;">
+            <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Color="Color.Success"/>
+            <MudText Typo="Typo.h5" Style="font-weight: 600; margin: 0;">Converted Videos</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Success">@convertedVideos.Count</MudChip>
+        </MudStack>
+        <MudPaper Elevation="0"
+                  Style="background: rgba(255, 255, 255, 0.02);
+                         border-radius: 20px;
+                         padding: 24px;
+                         margin-bottom: 32px;
+                         border: 1px solid rgba(61, 203, 108, 0.15);">
+            <MudStack Spacing="3">
+                @foreach (var job in convertedVideos)
+                {
+                    <MudCard Elevation="0"
+                             Style="background: linear-gradient(135deg, rgba(61, 203, 108, 0.08) 0%, rgba(126, 111, 255, 0.05) 100%);
+                                    border-radius: 16px;
+                                    border: 1px solid rgba(61, 203, 108, 0.15);
+                                    transition: all 0.3s ease;"
+                             Class="modern-card">
+                        <MudCardContent Style="padding: 24px;">
+                            <MudStack Spacing="3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="1" Style="flex: 1;">
+                                        <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
+                                        <MudText Typo="Typo.body2" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
+                                    </MudStack>
+                                    <MudChip T="string"
+                                             Icon="@GetStatusIcon(job.Status)"
+                                             Color="GetStatusColor(job.Status)"
+                                             Size="Size.Small"
+                                             Style="border-radius: 8px; font-weight: 500;">
+                                        @job.Status.ToString()
+                                    </MudChip>
+                                </MudStack>
+
+                                @if (!string.IsNullOrEmpty(job.ErrorMessage))
+                                {
+                                    <MudAlert Severity="Severity.Error"
+                                              Style="border-radius: 12px; border-left: 4px solid #ff3f5f;">
+                                        @job.ErrorMessage
+                                    </MudAlert>
+                                }
+
+                                @if (job.Status == DownloadStatus.ConversionCompleted)
+                                {
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => PlayConvertedVideo(job)"
+                                                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Play Video
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="Color.Success"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => ArchiveConvertedVideo(job)"
+                                                   StartIcon="@Icons.Material.Filled.Archive"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Archive
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Error"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => DeleteConvertedVideo(job)"
+                                                   StartIcon="@Icons.Material.Filled.Delete"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Delete
+                                        </MudButton>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-bottom: 20px;">
+        <MudIcon Icon="@Icons.Material.Filled.Archive" Color="Color.Secondary"/>
+        <MudText Typo="Typo.h5" Style="font-weight: 600; margin: 0;">Archived Videos</MudText>
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@_archivedVideos.Count</MudChip>
+    </MudStack>
+    <MudPaper Elevation="0"
+              Style="background: rgba(255, 255, 255, 0.02);
+                     border-radius: 20px;
+                     padding: 24px;
+                     border: 1px solid rgba(126, 111, 255, 0.1);">
+        <MudDataGrid Items="_archivedVideos"
+                     Filterable="true"
+                     FilterMode="DataGridFilterMode.Simple"
+                     SortMode="SortMode.Multiple"
+                     Dense="false"
+                     Hover="true"
+                     Elevation="0"
+                     Style="background: transparent; border-radius: 12px;">
+            <Columns>
+                <PropertyColumn Property="x => x.Title" Title="Title" Filterable="true" Sortable="true">
+                    <CellTemplate>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            @if (!string.IsNullOrEmpty(context.Item.Thumbnail))
+                            {
+                                <div style="width: 80px;
+                                           height: 45px;
+                                           border-radius: 8px;
+                                           overflow: hidden;
+                                           border: 1px solid rgba(126, 111, 255, 0.3);
+                                           background: black;">
+                                    <img src="/thumbnails/@context.Item.Thumbnail"
+                                         alt="@context.Item.Title"
+                                         style="width: 100%;
+                                                height: 100%;
+                                                object-fit: cover;" />
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="width: 40px;
+                                           height: 40px;
+                                           background: linear-gradient(135deg, rgba(126, 111, 255, 0.2) 0%, rgba(58, 134, 255, 0.15) 100%);
+                                           border-radius: 10px;
+                                           display: flex;
+                                           align-items: center;
+                                           justify-content: center;">
+                                    <MudIcon Icon="@Icons.Material.Filled.VideoFile" Size="Size.Medium" Style="color: #7e6fff;"/>
+                                </div>
+                            }
+                            <MudText Style="font-weight: 500;">@context.Item.Title</MudText>
+                        </MudStack>
+                    </CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn Property="x => x.ArchivedAt" Title="Archived" Format="yyyy-MM-dd HH:mm" Sortable="true" InitialDirection="SortDirection.Descending" Filterable="false">
+                    <CellTemplate>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small" Style="opacity: 0.6;"/>
+                            <MudText Style="font-size: 0.875rem;">@context.Item.ArchivedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
+                        </MudStack>
+                    </CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn Property="x => x.FileSizeFormatted" Title="Size" Sortable="false" Filterable="false">
+                    <CellTemplate>
+                        <MudChip T="string"
+                                 Icon="@Icons.Material.Filled.Storage"
+                                 Size="Size.Small"
+                                 Style="background: rgba(126, 111, 255, 0.1); border-radius: 8px;">
+                            @context.Item.FileSizeFormatted
+                        </MudChip>
+                    </CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn Property="x => x.Duration" Title="Duration" Sortable="false" Filterable="false">
+                    <CellTemplate>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Style="opacity: 0.6;"/>
+                            <MudText Style="font-size: 0.875rem;">@context.Item.Duration</MudText>
+                        </MudStack>
+                    </CellTemplate>
+                </PropertyColumn>
+                <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+                    <CellTemplate>
+                        <MudStack Row="true" Spacing="1">
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                           Color="Color.Primary"
+                                           Size="Size.Medium"
+                                           OnClick="() => PlayVideo(context.Item)"
+                                           Style="border-radius: 8px; transition: all 0.2s ease;"
+                                           Class="action-btn"/>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error"
+                                           Size="Size.Medium"
+                                           OnClick="() => DeleteVideo(context.Item)"
+                                           Style="border-radius: 8px; transition: all 0.2s ease;"
+                                           Class="action-btn"/>
+                        </MudStack>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    </MudPaper>
+</MudContainer>
+
+<style>
+    .download-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 32px rgba(126, 111, 255, 0.5) !important;
+    }
+
+    .modern-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 28px rgba(126, 111, 255, 0.2);
+    }
+
+    .modern-progress .mud-progress-linear-bar {
+        background: linear-gradient(90deg, #7e6fff 0%, #3a86ff 100%);
+    }
+
+    .action-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .mud-table-row:hover {
+        background: rgba(126, 111, 255, 0.05) !important;
+        transition: background 0.2s ease;
+    }
+</style>
+
+@code {
+    private string _newStreamUrl = string.Empty;
+    private string _selectedResolution = "Best";
+    private List<DownloadJob> _activeDownloads = new();
+    private List<ConversionJob> _activeConversions = new();
+    private List<ArchivedVideo> _archivedVideos = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _activeDownloads = DownloadService.GetActiveDownloads().ToList();
+        _activeConversions = ConversionService.GetActiveConversions().ToList();
+        _archivedVideos = (await ArchiveService.GetArchivedVideosAsync()).ToList();
+
+        DownloadService.DownloadUpdated += OnDownloadUpdated;
+        ConversionService.ConversionUpdated += OnConversionUpdated;
+        ArchiveService.ArchiveUpdated += OnArchiveUpdated;
+    }
+
+    private async void OnDownloadUpdated(object? sender, DownloadJob job)
+    {
+        await InvokeAsync(() =>
+        {
+            var existing = _activeDownloads.FirstOrDefault(d => d.Id == job.Id);
+            if (existing == null)
+            {
+                _activeDownloads.Add(job);
+            }
+            StateHasChanged();
+        });
+    }
+
+    private async void OnConversionUpdated(object? sender, ConversionJob job)
+    {
+        await InvokeAsync(() =>
+        {
+            var existing = _activeConversions.FirstOrDefault(c => c.Id == job.Id);
+            if (existing == null)
+            {
+                _activeConversions.Add(job);
+            }
+
+            // Update corresponding download job status if it exists
+            var downloadJob = _activeDownloads.FirstOrDefault(d => d.Id == job.DownloadJobId);
+            if (downloadJob != null && job.Status == ConversionStatus.Completed)
+            {
+                downloadJob.Status = DownloadStatus.ConversionCompleted;
+            }
+            else if (downloadJob != null && job.Status == ConversionStatus.Failed)
+            {
+                downloadJob.Status = DownloadStatus.ConversionFailed;
+                downloadJob.ErrorMessage = job.ErrorMessage;
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private async void OnArchiveUpdated(object? sender, EventArgs e)
+    {
+        await InvokeAsync(async () =>
+        {
+            _archivedVideos = (await ArchiveService.GetArchivedVideosAsync()).ToList();
+            StateHasChanged();
+        });
+    }
+
+    private async Task StartDownload()
+    {
+        if (string.IsNullOrWhiteSpace(_newStreamUrl))
+            return;
+
+        try
+        {
+            await DownloadService.StartDownloadAsync(_newStreamUrl, _selectedResolution);
+            Snackbar.Add("Download started", Severity.Success);
+            _newStreamUrl = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to start download: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task StopDownload(string jobId)
+    {
+        var result = await DownloadService.StopDownloadAsync(jobId);
+        if (result)
+        {
+            Snackbar.Add("Download stopped", Severity.Info);
+        }
+        else
+        {
+            Snackbar.Add("Failed to stop download", Severity.Error);
+        }
+    }
+
+    private async Task ArchiveDownload(DownloadJob job)
+    {
+        try
+        {
+            await ArchiveService.ArchiveVideoAsync(job);
+            _activeDownloads.Remove(job);
+            Snackbar.Add("Video archived successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to archive video: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PlayVideo(ArchivedVideo video)
+    {
+        var parameters = new DialogParameters
+        {
+            { nameof(VideoPlayerDialog.Video), video }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<VideoPlayerDialog>("Play Video", parameters, options);
+    }
+
+    private async Task DeleteVideo(ArchivedVideo video)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            $"Are you sure you want to delete '{video.Title}'? This cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (result == true)
+        {
+            var deleted = await ArchiveService.DeleteVideoAsync(video.Id);
+            if (deleted)
+            {
+                Snackbar.Add("Video deleted successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete video", Severity.Error);
+            }
+        }
+    }
+
+    private async Task PlayConvertedVideo(DownloadJob job)
+    {
+        // Find the converted file
+        var conversion = _activeConversions.FirstOrDefault(c => c.DownloadJobId == job.Id && c.Status == ConversionStatus.Completed);
+        if (conversion == null || !File.Exists(conversion.OutputPath))
+        {
+            Snackbar.Add("Converted file not found", Severity.Error);
+            return;
+        }
+
+        // Create a temporary ArchivedVideo object for the player dialog
+        var video = new ArchivedVideo
+        {
+            Title = conversion.Title,
+            FileName = Path.GetFileName(conversion.OutputPath),
+            OriginalUrl = conversion.OriginalUrl,
+            FilePath = conversion.OutputPath
+        };
+
+        var parameters = new DialogParameters
+        {
+            { nameof(VideoPlayerDialog.Video), video }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<VideoPlayerDialog>("Play Video", parameters, options);
+    }
+
+    private async Task ArchiveConvertedVideo(DownloadJob job)
+    {
+        try
+        {
+            // Find the converted file
+            var conversion = _activeConversions.FirstOrDefault(c => c.DownloadJobId == job.Id && c.Status == ConversionStatus.Completed);
+            if (conversion == null || !File.Exists(conversion.OutputPath))
+            {
+                Snackbar.Add("Converted file not found", Severity.Error);
+                return;
+            }
+
+            // Store original file path before updating
+            var originalFilePath = job.OutputPath;
+
+            // Update the job's OutputPath to point to the converted file
+            job.OutputPath = conversion.OutputPath;
+
+            await ArchiveService.ArchiveVideoAsync(job);
+
+            // Delete the original download file since we're keeping only the converted version
+            if (!string.IsNullOrEmpty(originalFilePath) && File.Exists(originalFilePath))
+            {
+                try
+                {
+                    File.Delete(originalFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete original file after archiving conversion: {FilePath}", originalFilePath);
+                }
+            }
+
+            // Remove from active downloads and conversions
+            _activeDownloads.Remove(job);
+            _activeConversions.Remove(conversion);
+
+            Snackbar.Add("Video archived successfully", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to archive video: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteConvertedVideo(DownloadJob job)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            $"Are you sure you want to delete '{job.Title}'? This cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (result == true)
+        {
+            try
+            {
+                // Find and delete the converted file
+                var conversion = _activeConversions.FirstOrDefault(c => c.DownloadJobId == job.Id);
+                if (conversion != null && File.Exists(conversion.OutputPath))
+                {
+                    File.Delete(conversion.OutputPath);
+                }
+
+                // Delete original download file if it exists
+                if (!string.IsNullOrEmpty(job.OutputPath) && File.Exists(job.OutputPath))
+                {
+                    File.Delete(job.OutputPath);
+                }
+
+                // Remove from lists
+                _activeDownloads.Remove(job);
+                if (conversion != null)
+                {
+                    _activeConversions.Remove(conversion);
+                }
+
+                Snackbar.Add("Video deleted successfully", Severity.Success);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to delete video: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private Color GetStatusColor(DownloadStatus status) => status switch
+    {
+        DownloadStatus.Starting => Color.Info,
+        DownloadStatus.Downloading => Color.Primary,
+        DownloadStatus.Processing => Color.Secondary,
+        DownloadStatus.Completed => Color.Success,
+        DownloadStatus.Failed => Color.Error,
+        DownloadStatus.Stopped => Color.Warning,
+        DownloadStatus.Converting => Color.Info,
+        DownloadStatus.ConversionCompleted => Color.Success,
+        DownloadStatus.ConversionFailed => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetStatusIcon(DownloadStatus status) => status switch
+    {
+        DownloadStatus.Starting => Icons.Material.Filled.HourglassTop,
+        DownloadStatus.Downloading => Icons.Material.Filled.Download,
+        DownloadStatus.Processing => Icons.Material.Filled.Settings,
+        DownloadStatus.Completed => Icons.Material.Filled.CheckCircle,
+        DownloadStatus.Failed => Icons.Material.Filled.Error,
+        DownloadStatus.Stopped => Icons.Material.Filled.PauseCircle,
+        DownloadStatus.Converting => Icons.Material.Filled.Transform,
+        DownloadStatus.ConversionCompleted => Icons.Material.Filled.CheckCircle,
+        DownloadStatus.ConversionFailed => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.Circle
+    };
+
+    private Color GetConversionStatusColor(ConversionStatus status) => status switch
+    {
+        ConversionStatus.Queued => Color.Secondary,
+        ConversionStatus.Converting => Color.Info,
+        ConversionStatus.Completed => Color.Success,
+        ConversionStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetConversionStatusIcon(ConversionStatus status) => status switch
+    {
+        ConversionStatus.Queued => Icons.Material.Filled.Queue,
+        ConversionStatus.Converting => Icons.Material.Filled.Transform,
+        ConversionStatus.Completed => Icons.Material.Filled.CheckCircle,
+        ConversionStatus.Failed => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.Circle
+    };
+
+    public void Dispose()
+    {
+        DownloadService.DownloadUpdated -= OnDownloadUpdated;
+        ConversionService.ConversionUpdated -= OnConversionUpdated;
+        ArchiveService.ArchiveUpdated -= OnArchiveUpdated;
+    }
+}

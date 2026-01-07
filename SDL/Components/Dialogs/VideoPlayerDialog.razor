@@ -1,0 +1,96 @@
+@using SDL.Models
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h6">@Video?.Title</MudText>
+
+            @if (Video != null)
+            {
+                <video controls style="width: 100%; max-height: 70vh; background-color: black;">
+                    <source src="@GetVideoUrl()" type="@GetMimeType()">
+                    Your browser does not support the video tag.
+                </video>
+
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body2">
+                        <strong>File:</strong> @Video.FileName
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Size:</strong> @Video.FileSizeFormatted
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Archived:</strong> @Video.ArchivedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(Video.Duration))
+                    {
+                        <MudText Typo="Typo.body2">
+                            <strong>Duration:</strong> @Video.Duration
+                        </MudText>
+                    }
+                    @if (!string.IsNullOrEmpty(Video.Uploader))
+                    {
+                        <MudText Typo="Typo.body2">
+                            <strong>Uploader:</strong> @Video.Uploader
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.body2">
+                        <strong>Original URL:</strong>
+                        <MudLink Href="@Video.OriginalUrl" Target="_blank">@Video.OriginalUrl</MudLink>
+                    </MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IDialogReference? MudDialog { get; set; }
+
+    [Parameter]
+    public ArchivedVideo? Video { get; set; }
+
+    private string GetVideoUrl()
+    {
+        if (Video == null)
+            return string.Empty;
+
+        // Determine the directory based on file path
+        var fileName = Video.FileName;
+
+        // If the file path contains "converted", serve from converted directory
+        if (Video.FilePath.Contains("converted", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"/converted/{fileName}";
+        }
+
+        // Otherwise serve from archives directory
+        return $"/archives/{fileName}";
+    }
+
+    private string GetMimeType()
+    {
+        if (Video == null)
+            return "video/mp4";
+
+        var extension = Path.GetExtension(Video.FileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".webm" => "video/webm",
+            ".mp4" => "video/mp4",
+            ".mkv" => "video/x-matroska",
+            ".avi" => "video/x-msvideo",
+            _ => "video/mp4"
+        };
+    }
+
+    private void Close()
+    {
+        MudDialog?.Close();
+    }
+}

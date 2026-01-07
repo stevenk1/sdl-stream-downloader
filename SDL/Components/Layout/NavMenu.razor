@@ -1,0 +1,56 @@
+﻿<MudNavMenu Style="padding: 0 12px;">
+    <MudNavLink Href="/"
+                Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Filled.CloudDownload"
+                Style="border-radius: 12px; margin: 4px 0; padding: 12px 16px; transition: all 0.3s ease; font-weight: 500;"
+                Class="modern-nav-link">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Medium"/>
+            <span style="letter-spacing: 0.2px;">Downloads & Archive</span>
+        </MudStack>
+    </MudNavLink>
+</MudNavMenu>
+
+<style>
+    .modern-nav-link {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .modern-nav-link::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 0;
+        background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%);
+        border-radius: 0 3px 3px 0;
+        transition: height 0.3s ease;
+    }
+
+    .modern-nav-link:hover::before,
+    .modern-nav-link.active::before {
+        height: 60%;
+    }
+
+    .modern-nav-link:hover {
+        background: linear-gradient(135deg, rgba(126, 111, 255, 0.15) 0%, rgba(58, 134, 255, 0.1) 100%) !important;
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(126, 111, 255, 0.2);
+    }
+
+    .modern-nav-link.active {
+        background: linear-gradient(135deg, rgba(126, 111, 255, 0.2) 0%, rgba(58, 134, 255, 0.15) 100%) !important;
+        box-shadow: 0 4px 16px rgba(126, 111, 255, 0.3);
+    }
+
+    .mud-nav-link-icon {
+        transition: transform 0.3s ease;
+    }
+
+    .modern-nav-link:hover .mud-nav-link-icon {
+        transform: scale(1.1);
+    }
+</style>
