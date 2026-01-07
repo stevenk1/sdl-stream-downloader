@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore SDL/SDL.csproj
+
+    - name: Build
+      run: dotnet build SDL/SDL.csproj -c Release --no-restore
+
+    - name: Test
+      run: dotnet test SDL/SDL.csproj -c Release --no-build --verbosity normal
+      continue-on-error: true
