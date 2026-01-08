@@ -213,11 +213,23 @@
                                         <MudButton Variant="Variant.Filled"
                                                    Color="Color.Success"
                                                    Size="Size.Medium"
-                                                   OnClick="() => ArchiveDownload(job)"
+                                                   OnClick="() => ArchiveJob(job)"
                                                    StartIcon="@Icons.Material.Filled.Archive"
                                                    Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Archive Video
+                                        </MudButton>
+                                    }
+                                    @if (job.Status == DownloadStatus.Failed || job.Status == DownloadStatus.Stopped)
+                                    {
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Error"
+                                                   Size="Size.Medium"
+                                                   OnClick="() => DeleteJob(job)"
+                                                   StartIcon="@Icons.Material.Filled.Delete"
+                                                   Class="action-btn"
+                                                   Style="border-radius: 10px; text-transform: none; font-weight: 500;">
+                                            Delete
                                         </MudButton>
                                     }
                                 </MudStack>
@@ -411,7 +423,7 @@
                                         <MudButton Variant="Variant.Outlined"
                                                    Color="Color.Error"
                                                    Size="Size.Medium"
-                                                   OnClick="() => DeleteConvertedVideo(job)"
+                                                   OnClick="() => DeleteJob(job)"
                                                    StartIcon="@Icons.Material.Filled.Delete"
                                                    Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
@@ -425,7 +437,7 @@
                                         <MudButton Variant="Variant.Filled"
                                                    Color="Color.Error"
                                                    Size="Size.Medium"
-                                                   OnClick="() => DeleteConvertedVideo(job)"
+                                                   OnClick="() => DeleteJob(job)"
                                                    StartIcon="@Icons.Material.Filled.Delete"
                                                    Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
@@ -810,7 +822,7 @@
         }
     }
 
-    private async Task ArchiveDownload(DownloadJob job)
+    private async Task ArchiveJob(DownloadJob job)
     {
         try
         {
@@ -912,7 +924,7 @@
         }
     }
 
-    private async Task DeleteConvertedVideo(DownloadJob job)
+    private async Task DeleteJob(DownloadJob job)
     {
         bool? result = await DialogService.ShowMessageBox(
             "Confirm Delete",
@@ -926,11 +938,11 @@
             {
                 await VideoManagement.DeleteJobAsync(job);
                 RefreshData();
-                Snackbar.Add("Video deleted successfully", Severity.Success);
+                Snackbar.Add("Job deleted successfully", Severity.Success);
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Failed to delete video: {ex.Message}", Severity.Error);
+                Snackbar.Add($"Failed to delete job: {ex.Message}", Severity.Error);
             }
         }
     }

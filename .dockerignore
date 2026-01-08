@@ -1,0 +1,23 @@
+# Exclude local data folder from Docker build context
+data/
+
+# .NET build outputs
+**/bin/
+**/obj/
+**/out/
+**/Debug/
+**/Release/
+
+# IDE and tooling
+**/.vs/
+**/.vscode/
+**/.idea/
+
+# Version control metadata
+**/.git/
+**/.gitignore
+**/.gitattributes
+
+# OS files
+**/.DS_Store
+**/Thumbs.db
