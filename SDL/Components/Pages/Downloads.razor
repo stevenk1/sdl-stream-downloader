@@ -8,6 +8,7 @@
 @inject VideoArchiveService ArchiveService
 @inject VideoManagementService VideoManagement
 @inject IFileSystemService FileSystem
+@inject IUrlService UrlService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ILogger<Downloads> _logger
@@ -357,7 +358,7 @@
                                                        cursor: pointer;
                                                        transition: all 0.2s ease;"
                                                  title="Click to view all thumbnails">
-                                                <img src="/thumbnails/@(job.Thumbnails?.FirstOrDefault() ?? job.Thumbnail)"
+                                               <img src="@UrlService.GetThumbnailUrl(job.Thumbnails?.FirstOrDefault() ?? job.Thumbnail)"
                                                      alt="@job.Title"
                                                      style="width: 100%;
                                                             height: 100%;
@@ -475,7 +476,7 @@
                                            cursor: pointer;
                                            transition: all 0.2s ease;"
                                      title="Click to view all thumbnails">
-                                    <img src="/thumbnails/@(context.Item.Thumbnails?.FirstOrDefault() ?? context.Item.Thumbnail)"
+                                    <img src="@UrlService.GetThumbnailUrl(context.Item.Thumbnails?.FirstOrDefault() ?? context.Item.Thumbnail)"
                                          alt="@context.Item.Title"
                                          style="width: 100%;
                                                 height: 100%;

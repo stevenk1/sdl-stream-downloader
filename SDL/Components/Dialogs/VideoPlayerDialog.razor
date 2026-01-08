@@ -1,5 +1,6 @@
 @using SDL.Models
 @using MudBlazor
+@inject IUrlService UrlService
 
 <MudDialog Class="video-player-dialog">
     <DialogContent>
@@ -102,20 +103,7 @@
 
     private string GetVideoUrl()
     {
-        if (Video == null)
-            return string.Empty;
-
-        // Determine the directory based on file path
-        var fileName = Video.FileName;
-
-        // If the file path contains "converted", serve from converted directory
-        if (Video.FilePath.Contains("converted", StringComparison.OrdinalIgnoreCase))
-        {
-            return $"/converted/{fileName}";
-        }
-
-        // Otherwise serve from archives directory
-        return $"/archives/{fileName}";
+        return UrlService.GetVideoUrl(Video);
     }
 
     private string GetMimeType()

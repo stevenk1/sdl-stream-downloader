@@ -27,7 +27,7 @@ public class VideoDatabaseService : IDisposable
         _fileSystem = fileSystem;
 
         // Create database file in the archive directory
-        var dbPath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, "videos.db");
+        var dbPath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, _settings.DatabaseFileName);
         _fileSystem.CreateDirectory(_settings.ArchiveDirectory);
 
         _db = new LiteDatabase(dbPath);

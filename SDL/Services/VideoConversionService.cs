@@ -1,9 +1,11 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using SDL.Configuration;
 using System.Globalization;
 using SDL.Models;
+using CliWrap;
+using CliWrap.EventStream;
+using CliWrap.Buffered;
 
 namespace SDL.Services;
 
@@ -13,16 +15,23 @@ public partial class VideoConversionService
     private readonly ILogger<VideoConversionService> _logger;
     private readonly VideoDatabaseService _db;
     private readonly IFileSystemService _fileSystem;
-    private readonly Dictionary<string, (Process Process, CancellationTokenSource Cts)> _activeConversions = new();
+    private readonly IConversionQueue _conversionQueue;
+    private readonly Dictionary<string, CancellationTokenSource> _activeConversions = new();
 
     public event EventHandler<ConversionJob>? ConversionUpdated;
 
-    public VideoConversionService(IOptions<VideoStorageSettings> settings, ILogger<VideoConversionService> logger, VideoDatabaseService db, IFileSystemService fileSystem)
+    public VideoConversionService(
+        IOptions<VideoStorageSettings> settings, 
+        ILogger<VideoConversionService> logger, 
+        VideoDatabaseService db, 
+        IFileSystemService fileSystem,
+        IConversionQueue conversionQueue)
     {
         _settings = settings.Value;
         _logger = logger;
         _db = db;
         _fileSystem = fileSystem;
+        _conversionQueue = conversionQueue;
 
         // Log loaded settings for diagnostics
         _logger.LogInformation("VideoConversionService initialized with settings:");
@@ -67,32 +76,28 @@ public partial class VideoConversionService
 
         // Generate output path
         var fileName = _fileSystem.GetFileNameWithoutExtension(downloadJob.OutputPath);
-        job.OutputPath = _fileSystem.CombinePaths(_settings.ConvertedDirectory, $"{fileName}.{_settings.ConversionOutputFormat}");
+        var convertedFileName = _settings.ConvertedFilenameTemplate
+            .Replace("{fn}", fileName)
+            .Replace("{ext}", _settings.ConversionOutputFormat);
+            
+        job.OutputPath = _fileSystem.CombinePaths(_settings.ConvertedDirectory, convertedFileName);
 
         _db.UpsertConversionJob(job);
         NotifyConversionUpdated(job);
 
-        var cts = new CancellationTokenSource();
-        _ = Task.Run(() => ExecuteConversionAsync(job, cts.Token), cts.Token);
+        await _conversionQueue.QueueConversionAsync(job);
 
         return job;
     }
 
     public async Task<bool> CancelConversionAsync(string jobId)
     {
-        if (!_activeConversions.TryGetValue(jobId, out var conversion))
+        if (!_activeConversions.TryGetValue(jobId, out var cts))
             return false;
 
         try
         {
-            conversion.Cts.Cancel();
-
-            if (!conversion.Process.HasExited)
-            {
-                conversion.Process.Kill(entireProcessTree: true);
-                await conversion.Process.WaitForExitAsync();
-            }
-
+            cts.Cancel();
             _activeConversions.Remove(jobId);
             return true;
         }
@@ -103,69 +108,62 @@ public partial class VideoConversionService
         }
     }
 
-    private async Task ExecuteConversionAsync(ConversionJob job, CancellationToken cancellationToken)
+    internal async Task ExecuteConversionAsync(ConversionJob job, CancellationToken stoppingToken)
     {
+        using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        _activeConversions[job.Id] = jobCts;
+
         try
         {
-            // Build FFmpeg arguments
-            var args = $"-i \"{job.SourcePath}\" " +
-                      $"-c:v {_settings.VideoCodec} " +
-                      $"-c:a {_settings.AudioCodec} " +
-                      $"-b:a {_settings.AudioBitrate} " +
-                      $"-progress pipe:1 -stats_period 0.5 " +
-                      $"-y " + // Overwrite output file
-                      $"\"{job.OutputPath}\"";
+            // Build FFmpeg command
+            var cmd = Cli.Wrap(_settings.FfmpegPath)
+                .WithArguments(args => args
+                    .Add("-i").Add(job.SourcePath)
+                    .Add("-c:v").Add(_settings.VideoCodec)
+                    .Add("-c:a").Add(_settings.AudioCodec)
+                    .Add("-b:a").Add(_settings.AudioBitrate)
+                    .Add("-progress").Add("pipe:1")
+                    .Add("-stats_period").Add("0.5")
+                    .Add("-y")
+                    .Add(job.OutputPath));
 
-            // Log the command for manual testing
-            _logger.LogInformation("Executing FFmpeg command: {FfmpegPath} {Args}", _settings.FfmpegPath, args);
-
-            var processInfo = new ProcessStartInfo
-            {
-                FileName = _settings.FfmpegPath,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            var process = new Process { StartInfo = processInfo };
-            var cts = new CancellationTokenSource();
-            _activeConversions[job.Id] = (process, cts);
+            _logger.LogInformation("Executing FFmpeg command: {Command}", cmd.ToString());
 
             // Get duration from ffprobe first for accurate progress
             double? totalDuration = await GetVideoDurationAsync(job.SourcePath);
 
-            process.OutputDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                {
-                    _logger.LogInformation("FFmpeg stdout: {Data}", e.Data);
-                    ParseFfmpegProgress(job, e.Data, totalDuration);
-                }
-            };
-
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                {
-                    _logger.LogInformation("FFmpeg stderr: {Data}", e.Data);
-                    // FFmpeg outputs progress info to stderr
-                    ParseFfmpegProgress(job, e.Data, totalDuration);
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
             job.Status = ConversionStatus.Converting;
             NotifyConversionUpdated(job);
 
-            await process.WaitForExitAsync(cancellationToken);
+            int exitCode = 0;
+            bool cancelled = false;
+
+            try
+            {
+                await foreach (var cmdEvent in cmd.ListenAsync(jobCts.Token))
+                {
+                    switch (cmdEvent)
+                    {
+                        case StandardOutputCommandEvent stdOut:
+                            ParseFfmpegProgress(job, stdOut.Text, totalDuration);
+                            break;
+                        case StandardErrorCommandEvent stdErr:
+                            // FFmpeg outputs some progress/info to stderr too
+                            ParseFfmpegProgress(job, stdErr.Text, totalDuration);
+                            break;
+                        case ExitedCommandEvent exited:
+                            exitCode = exited.ExitCode;
+                            break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
 
             // Determine final status
-            if (cancellationToken.IsCancellationRequested || process.ExitCode == 137 || process.ExitCode == 143 || process.ExitCode == 255)
+            if (cancelled || exitCode == 137 || exitCode == 143 || exitCode == 255)
             {
                 job.Status = ConversionStatus.Failed;
                 job.ErrorMessage = "Conversion cancelled";
@@ -179,7 +177,7 @@ public partial class VideoConversionService
                 // Update the corresponding DownloadJob status
                 UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, "Conversion cancelled", null, null);
             }
-            else if (process.ExitCode == 0 && _fileSystem.FileExists(job.OutputPath))
+            else if (exitCode == 0 && _fileSystem.FileExists(job.OutputPath))
             {
                 job.Status = ConversionStatus.Completed;
                 job.Progress = 100;
@@ -207,14 +205,13 @@ public partial class VideoConversionService
             else
             {
                 job.Status = ConversionStatus.Failed;
-                job.ErrorMessage = $"Conversion failed with exit code {process.ExitCode}";
+                job.ErrorMessage = $"Conversion failed with exit code {exitCode}";
 
                 // Update the corresponding DownloadJob status
                 UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, job.ErrorMessage, null, null);
             }
 
             NotifyConversionUpdated(job);
-            _activeConversions.Remove(job.Id);
         }
         catch (Exception ex)
         {
@@ -226,6 +223,9 @@ public partial class VideoConversionService
             UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, ex.Message, null, null);
 
             NotifyConversionUpdated(job);
+        }
+        finally
+        {
             _activeConversions.Remove(job.Id);
         }
     }
@@ -266,42 +266,18 @@ public partial class VideoConversionService
     {
         try
         {
-            var processInfo = new ProcessStartInfo
-            {
-                FileName = "ffprobe",
-                Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{videoPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var result = await Cli.Wrap("ffprobe")
+                .WithArguments(args => args
+                    .Add("-v").Add("error")
+                    .Add("-show_entries").Add("format=duration")
+                    .Add("-of").Add("default=noprint_wrappers=1:nokey=1")
+                    .Add(videoPath))
+                .ExecuteBufferedAsync();
 
-            var process = Process.Start(processInfo);
-            if (process == null)
-            {
-                _logger.LogWarning("Failed to start ffprobe process for {VideoPath}", videoPath);
-                return null;
-            }
-
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogWarning("ffprobe failed with exit code {ExitCode} for {VideoPath}. Error: {Error}",
-                    process.ExitCode, videoPath, error);
-                return null;
-            }
-
-            if (double.TryParse(output.Trim(), CultureInfo.InvariantCulture, out var duration))
+            if (double.TryParse(result.StandardOutput.Trim(), CultureInfo.InvariantCulture, out var duration))
             {
                 _logger.LogInformation("Video duration for {VideoPath}: {Duration} seconds", videoPath, duration);
                 return duration;
-            }
-            else
-            {
-                _logger.LogWarning("Could not parse duration from ffprobe output: {Output}", output);
             }
         }
         catch (Exception ex)
@@ -391,50 +367,34 @@ public partial class VideoConversionService
             for (int i = 0; i < percentages.Length; i++)
             {
                 var timestamp = duration.Value * percentages[i];
-                var thumbnailFileName = $"{thumbnailId}_thumb_{i + 1:D2}.jpg";
+                var thumbnailFileName = _settings.ThumbnailFilenameTemplate
+                    .Replace("{id}", thumbnailId)
+                    .Replace("{index:D2}", (i + 1).ToString("D2"));
+                
                 var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
 
-                // Build FFmpeg command to extract a single frame
-                var args = $"-ss {timestamp.ToString(CultureInfo.InvariantCulture)} " +
-                          $"-i \"{videoPath}\" " +
-                          $"-vframes 1 " +
-                          $"-vf scale=1280:-1 " +
-                          $"-q:v 2 " +
-                          $"-y " +
-                          $"\"{thumbnailPath}\"";
+                _logger.LogInformation("Generating thumbnail {Index}/{Total}: {FfmpegPath} at {Timestamp}s",
+                    i + 1, percentages.Length, _settings.FfmpegPath, timestamp);
 
-                _logger.LogInformation("Generating thumbnail {Index}/{Total}: {FfmpegPath} {Args}",
-                    i + 1, percentages.Length, _settings.FfmpegPath, args);
+                var result = await Cli.Wrap(_settings.FfmpegPath)
+                    .WithArguments(args => args
+                        .Add("-ss").Add(timestamp.ToString(CultureInfo.InvariantCulture))
+                        .Add("-i").Add(videoPath)
+                        .Add("-vframes").Add("1")
+                        .Add("-vf").Add("scale=1280:-1")
+                        .Add("-q:v").Add("2")
+                        .Add("-y")
+                        .Add(thumbnailPath))
+                    .ExecuteAsync();
 
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = _settings.FfmpegPath,
-                    Arguments = args,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-
-                var process = Process.Start(processInfo);
-                if (process == null)
-                {
-                    _logger.LogError("Failed to start ffmpeg process for thumbnail generation");
-                    continue;
-                }
-
-                await process.WaitForExitAsync();
-
-                if (process.ExitCode == 0 && _fileSystem.FileExists(thumbnailPath))
+                if (result.ExitCode == 0 && _fileSystem.FileExists(thumbnailPath))
                 {
                     _logger.LogInformation("Thumbnail generated successfully: {ThumbnailPath}", thumbnailPath);
                     generatedThumbnails.Add(thumbnailFileName);
                 }
                 else
                 {
-                    var error = await process.StandardError.ReadToEndAsync();
-                    _logger.LogError("Thumbnail generation failed with exit code {ExitCode}. Error: {Error}",
-                        process.ExitCode, error);
+                    _logger.LogError("Thumbnail generation failed with exit code {ExitCode}", result.ExitCode);
                 }
             }
 

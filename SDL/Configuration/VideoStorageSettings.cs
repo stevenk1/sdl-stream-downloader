@@ -2,11 +2,22 @@ namespace SDL.Configuration;
 
 public class VideoStorageSettings
 {
-    public string DownloadDirectory { get; set; } = "Downloads";
-    public string ConvertedDirectory { get; set; } = "Converted";
-    public string ArchiveDirectory { get; set; } = "Archives";
-    public string ThumbnailDirectory { get; set; } = "Thumbnails";
+    public string DownloadDirectory { get; set; } = "wwwroot/downloads";
+    public string ConvertedDirectory { get; set; } = "wwwroot/converted";
+    public string ArchiveDirectory { get; set; } = "wwwroot/archives";
+    public string ThumbnailDirectory { get; set; } = "wwwroot/thumbnails";
+    
+    public string DownloadUrlPrefix { get; set; } = "/downloads/";
+    public string ConvertedUrlPrefix { get; set; } = "/converted/";
+    public string ArchiveUrlPrefix { get; set; } = "/archives/";
+    public string ThumbnailUrlPrefix { get; set; } = "/thumbnails/";
+
+    public string DownloadFilenameTemplate { get; set; } = "{id}.%(ext)s";
+    public string ConvertedFilenameTemplate { get; set; } = "{fn}.{ext}";
+    public string ThumbnailFilenameTemplate { get; set; } = "{id}_thumb_{index:D2}.jpg";
+
     public string MetadataFile { get; set; } = "video-metadata.json";
+    public string DatabaseFileName { get; set; } = "videos.db";
     public string YtDlpPath { get; set; } = "yt-dlp";
     public string OutputFormat { get; set; } = "mp4";
 
