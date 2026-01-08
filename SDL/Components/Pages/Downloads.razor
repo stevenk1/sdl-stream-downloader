@@ -16,6 +16,7 @@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Style="margin-top: 0;">
     <!-- Hero Section -->
     <MudPaper Elevation="0"
+              Class="hero-section"
               Style="background: linear-gradient(135deg, rgba(126, 111, 255, 0.15) 0%, rgba(58, 134, 255, 0.1) 100%);
                      border-radius: 24px;
                      padding: 48px 36px;
@@ -23,8 +24,9 @@
                      border: 1px solid rgba(126, 111, 255, 0.2);
                      backdrop-filter: blur(20px);">
         <MudStack Spacing="4">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                <div style="width: 56px;
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="hero-header">
+                <div class="hero-icon"
+                     style="width: 56px;
                            height: 56px;
                            background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%);
                            border-radius: 16px;
@@ -35,34 +37,37 @@
                     <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Large" Style="color: white;"/>
                 </div>
                 <MudStack Spacing="1">
-                    <MudText Typo="Typo.h3" Style="font-weight: 700; letter-spacing: -1px;">
+                    <MudText Typo="Typo.h3" Class="hero-title" Style="font-weight: 700; letter-spacing: -1px;">
                         Download Streams
                     </MudText>
-                    <MudText Typo="Typo.body1" Style="opacity: 0.8;">
+                    <MudText Typo="Typo.body1" Class="hero-subtitle" Style="opacity: 0.8;">
                         Capture and archive streams from Twitch, YouTube, and more
                     </MudText>
                 </MudStack>
             </MudStack>
 
             <MudPaper Elevation="0"
+                      Class="form-container"
                       Style="background: rgba(255, 255, 255, 0.05);
                              border-radius: 16px;
                              padding: 24px;
                              border: 1px solid rgba(255, 255, 255, 0.1);
                              backdrop-filter: blur(10px);">
-                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End">
+                <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="form-stack">
                     <MudTextField @bind-Value="_newStreamUrl"
                                   Label="Stream URL"
                                   Placeholder="https://twitch.tv/streamer or youtube.com/watch?v=..."
                                   Variant="Variant.Outlined"
                                   FullWidth="true"
                                   Immediate="true"
+                                  Class="url-input"
                                   Style="flex: 1;"
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Filled.Link"/>
                     <MudSelect @bind-Value="_selectedResolution"
                                Label="Quality"
                                Variant="Variant.Outlined"
+                               Class="quality-select"
                                Style="min-width: 140px;"
                                Adornment="Adornment.Start"
                                AdornmentIcon="@Icons.Material.Filled.HighQuality">
@@ -121,14 +126,14 @@
                                     border: 1px solid rgba(126, 111, 255, 0.15);
                                     transition: all 0.3s ease;"
                              Class="modern-card">
-                        <MudCardContent Style="padding: 24px;">
+                        <MudCardContent Class="card-content" Style="padding: 24px;">
                             <MudStack Spacing="3">
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudStack Spacing="1" Style="flex: 1;">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="card-header">
+                                    <MudStack Spacing="1" Style="flex: 1;" Class="card-title-section">
                                         <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
-                                        <MudText Typo="Typo.body2" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
+                                        <MudText Typo="Typo.body2" Class="card-url" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
                                     </MudStack>
-                                    <MudStack Row="true" Spacing="2">
+                                    <MudStack Row="true" Spacing="2" Class="card-chips">
                                         <MudChip T="string"
                                                  Icon="@Icons.Material.Filled.HighQuality"
                                                  Color="Color.Default"
@@ -155,7 +160,7 @@
                                                           Style="height: 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.2);"
                                                           Class="modern-progress"/>
                                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                            <MudStack Row="true" Spacing="3">
+                                            <MudStack Row="true" Spacing="3" Class="progress-stats">
                                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                                     <MudIcon Icon="@Icons.Material.Filled.DataUsage" Size="Size.Small" Style="opacity: 0.7;"/>
                                                     <MudText Typo="Typo.body2" Style="font-weight: 600;">@($"{job.Progress:F1}%")</MudText>
@@ -187,7 +192,7 @@
                                     </MudAlert>
                                 }
 
-                                <MudStack Row="true" Spacing="2">
+                                <MudStack Row="true" Spacing="2" Class="action-buttons">
                                     @if (job.Status == DownloadStatus.Downloading || job.Status == DownloadStatus.Processing)
                                     {
                                         <MudButton Variant="Variant.Filled"
@@ -195,6 +200,7 @@
                                                    Size="Size.Medium"
                                                    OnClick="() => StopDownload(job.Id)"
                                                    StartIcon="@Icons.Material.Filled.Stop"
+                                                   Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Stop Download
                                         </MudButton>
@@ -206,6 +212,7 @@
                                                    Size="Size.Medium"
                                                    OnClick="() => ArchiveDownload(job)"
                                                    StartIcon="@Icons.Material.Filled.Archive"
+                                                   Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Archive Video
                                         </MudButton>
@@ -379,12 +386,13 @@
 
                                 @if (job.Status == DownloadStatus.ConversionCompleted)
                                 {
-                                    <MudStack Row="true" Spacing="2">
+                                    <MudStack Row="true" Spacing="2" Class="action-buttons">
                                         <MudButton Variant="Variant.Filled"
                                                    Color="Color.Primary"
                                                    Size="Size.Medium"
                                                    OnClick="() => PlayConvertedVideo(job)"
                                                    StartIcon="@Icons.Material.Filled.PlayArrow"
+                                                   Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Play Video
                                         </MudButton>
@@ -393,6 +401,7 @@
                                                    Size="Size.Medium"
                                                    OnClick="() => ArchiveConvertedVideo(job)"
                                                    StartIcon="@Icons.Material.Filled.Archive"
+                                                   Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Archive
                                         </MudButton>
@@ -401,6 +410,7 @@
                                                    Size="Size.Medium"
                                                    OnClick="() => DeleteConvertedVideo(job)"
                                                    StartIcon="@Icons.Material.Filled.Delete"
+                                                   Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Delete
                                         </MudButton>
@@ -408,12 +418,13 @@
                                 }
                                 @if (job.Status == DownloadStatus.ConversionFailed)
                                 {
-                                    <MudStack Row="true" Spacing="2">
+                                    <MudStack Row="true" Spacing="2" Class="action-buttons">
                                         <MudButton Variant="Variant.Filled"
                                                    Color="Color.Error"
                                                    Size="Size.Medium"
                                                    OnClick="() => DeleteConvertedVideo(job)"
                                                    StartIcon="@Icons.Material.Filled.Delete"
+                                                   Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
                                             Delete
                                         </MudButton>
@@ -562,6 +573,155 @@
     .mud-table-row:hover {
         background: rgba(126, 111, 255, 0.05) !important;
         transition: background 0.2s ease;
+    }
+
+    /* Mobile Responsive Styles */
+    @@media (max-width: 768px) {
+        /* Hero Section */
+        .hero-section {
+            padding: 24px 20px !important;
+            border-radius: 16px !important;
+            margin-bottom: 20px !important;
+        }
+
+        .hero-icon {
+            width: 44px !important;
+            height: 44px !important;
+        }
+
+        .hero-icon .mud-icon-root {
+            font-size: 1.5rem !important;
+        }
+
+        .hero-title {
+            font-size: 1.75rem !important;
+        }
+
+        .hero-subtitle {
+            font-size: 0.875rem !important;
+        }
+
+        /* Form Container */
+        .form-container {
+            padding: 16px !important;
+        }
+
+        .form-stack {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+
+        .url-input, .quality-select {
+            width: 100% !important;
+            min-width: 100% !important;
+            flex: none !important;
+        }
+
+        .download-btn {
+            width: 100%;
+            padding: 12px 24px !important;
+        }
+
+        /* Card Content */
+        .card-content {
+            padding: 16px !important;
+        }
+
+        .card-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 12px;
+        }
+
+        .card-chips {
+            width: 100%;
+            flex-wrap: wrap;
+        }
+
+        .card-url {
+            word-break: break-all;
+            font-size: 0.75rem !important;
+        }
+
+        /* Progress Stats */
+        .progress-stats {
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+        }
+
+        .progress-stats .mud-stack {
+            font-size: 0.75rem !important;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            flex-direction: column !important;
+        }
+
+        .action-btn {
+            width: 100%;
+        }
+
+        /* DataGrid - Hide on mobile, show card view instead */
+        .mud-table {
+            font-size: 0.75rem !important;
+        }
+
+        .mud-table-cell {
+            padding: 8px 4px !important;
+        }
+
+        /* Hover effects disabled on mobile */
+        .modern-card:hover {
+            transform: none;
+        }
+
+        .download-btn:hover {
+            transform: none;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .hero-section {
+            padding: 16px 12px !important;
+        }
+
+        .hero-header {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .hero-title {
+            font-size: 1.5rem !important;
+        }
+
+        .hero-subtitle {
+            font-size: 0.8rem !important;
+        }
+
+        .form-container {
+            padding: 12px !important;
+        }
+
+        .card-content {
+            padding: 12px !important;
+        }
+
+        /* Further reduce text sizes */
+        .mud-typography-h6 {
+            font-size: 1rem !important;
+        }
+
+        .mud-typography-body2 {
+            font-size: 0.75rem !important;
+        }
+
+        /* Thumbnails smaller on very small screens */
+        .thumbnail-clickable {
+            width: 60px !important;
+            height: 34px !important;
+        }
     }
 </style>
 

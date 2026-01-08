@@ -3,13 +3,38 @@
 
 <head>
     <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"/>
     <base href="/"/>
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet"/>
     <link href="@Assets["_content/MudBlazor/MudBlazor.min.css"]" rel="stylesheet"/>
     <ImportMap/>
-    <link rel="icon" type="image/ico" href="favicon.ico"/>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
     <HeadOutlet @rendermode="InteractiveServer"/>
+    <style>
+        /* Global mobile-first responsive utilities */
+        * {
+            box-sizing: border-box;
+        }
+
+        @@media (max-width: 768px) {
+            .mud-container {
+                padding-left: 12px !important;
+                padding-right: 12px !important;
+            }
+
+            /* Ensure touch-friendly tap targets */
+            .mud-button, .mud-icon-button {
+                min-height: 44px;
+                min-width: 44px;
+            }
+        }
+
+        @@media (max-width: 480px) {
+            body {
+                font-size: 14px;
+            }
+        }
+    </style>
 </head>
 
 <body>

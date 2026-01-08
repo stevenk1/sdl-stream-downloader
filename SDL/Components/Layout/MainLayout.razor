@@ -6,11 +6,13 @@
 <MudSnackbarProvider/>
 <MudLayout>
     <MudAppBar Elevation="0" Style="backdrop-filter: blur(20px); background: linear-gradient(135deg, rgba(126, 111, 255, 0.1) 0%, rgba(58, 134, 255, 0.05) 100%); border-bottom: 1px solid rgba(126, 111, 255, 0.1);">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="ml-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="app-bar-content">
             <MudIcon Icon="@Icons.Material.Filled.VideoLibrary"
                      Size="Size.Large"
+                     Class="app-icon"
                      Style="background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"/>
             <MudText Typo="Typo.h5"
+                     Class="app-title"
                      Style="font-weight: 600; background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px;">
                 Stream Downloader
             </MudText>
@@ -23,7 +25,7 @@
                        Class="hover-lift"/>
     </MudAppBar>
     <MudMainContent Style="background: linear-gradient(135deg, rgba(126, 111, 255, 0.03) 0%, rgba(58, 134, 255, 0.02) 100%);">
-        <div style="padding: 24px; min-height: calc(100vh - 64px);">
+        <div class="main-content">
             @Body
         </div>
     </MudMainContent>
@@ -32,6 +34,48 @@
 <style>
     .hover-lift:hover {
         transform: translateY(-2px);
+    }
+
+    .main-content {
+        padding: 24px;
+        min-height: calc(100vh - 64px);
+    }
+
+    .app-bar-content {
+        margin-left: 16px;
+    }
+
+    /* Mobile responsive styles */
+    @@media (max-width: 768px) {
+        .main-content {
+            padding: 12px;
+        }
+
+        .app-bar-content {
+            margin-left: 8px;
+        }
+
+        .app-title {
+            font-size: 1.1rem !important;
+        }
+
+        .app-icon {
+            font-size: 1.75rem !important;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .app-title {
+            font-size: 0.95rem !important;
+        }
+
+        .app-icon {
+            font-size: 1.5rem !important;
+        }
+
+        .app-bar-content {
+            margin-left: 4px;
+        }
     }
 </style>
 

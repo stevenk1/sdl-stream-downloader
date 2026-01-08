@@ -1,22 +1,22 @@
 @using SDL.Models
 @using MudBlazor
 
-<MudDialog>
+<MudDialog Class="thumbnail-gallery-dialog">
     <DialogContent>
         <MudStack Spacing="3">
-            <MudText Typo="Typo.h6">@Video?.Title</MudText>
+            <MudText Typo="Typo.h6" Class="gallery-title">@Video?.Title</MudText>
 
             @if (Video != null && GetThumbnails().Any())
             {
                 <!-- Main Thumbnail Display -->
-                <MudPaper Elevation="4" Style="background: black; border-radius: 12px; overflow: hidden;">
+                <MudPaper Elevation="4" Class="main-thumbnail" Style="background: black; border-radius: 12px; overflow: hidden;">
                     <img src="/thumbnails/@GetThumbnails()[_currentIndex]"
                          alt="@Video.Title"
                          style="width: 100%; height: auto; max-height: 60vh; object-fit: contain; display: block;" />
                 </MudPaper>
 
                 <!-- Navigation Controls -->
-                <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="3">
+                <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="3" Class="nav-controls">
                     <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
                                    Color="Color.Primary"
                                    Size="Size.Large"
@@ -24,7 +24,7 @@
                                    Disabled="@(_currentIndex == 0)"
                                    Style="background: rgba(126, 111, 255, 0.1); border-radius: 50%;" />
 
-                    <MudText Typo="Typo.body1" Style="font-weight: 500; min-width: 100px; text-align: center;">
+                    <MudText Typo="Typo.body1" Class="nav-counter" Style="font-weight: 500; min-width: 100px; text-align: center;">
                         @(_currentIndex + 1) of @GetThumbnails().Count
                     </MudText>
 
@@ -38,6 +38,7 @@
 
                 <!-- Thumbnail Strip -->
                 <MudPaper Elevation="0"
+                          Class="thumbnail-strip"
                           Style="background: rgba(255, 255, 255, 0.02);
                                  border-radius: 12px;
                                  padding: 12px;
@@ -48,6 +49,7 @@
                             var index = i; // Capture for closure
                             var isSelected = index == _currentIndex;
                             <div @onclick="() => SelectThumbnail(index)"
+                                 class="thumbnail-item"
                                  style="cursor: pointer;
                                         border: @(isSelected ? "3px solid #7e6fff" : "2px solid rgba(126, 111, 255, 0.3)");
                                         border-radius: 8px;
@@ -68,7 +70,7 @@
                 </MudPaper>
 
                 <!-- Video Info -->
-                <MudStack Spacing="1">
+                <MudStack Spacing="1" Class="gallery-info">
                     <MudText Typo="Typo.body2">
                         <strong>File:</strong> @Video.FileName
                     </MudText>
@@ -96,6 +98,7 @@
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.PlayArrow"
                        OnClick="PlayVideo"
+                       Class="play-btn"
                        Style="background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%); border-radius: 8px;">
                 Play Video
             </MudButton>
@@ -104,9 +107,85 @@
     </DialogActions>
 </MudDialog>
 
+<style>
+    @@media (max-width: 768px) {
+        .thumbnail-gallery-dialog {
+            max-width: 100vw !important;
+            margin: 0 !important;
+        }
+
+        .main-thumbnail {
+            max-height: 40vh !important;
+        }
+
+        .main-thumbnail img {
+            max-height: 40vh !important;
+        }
+
+        .gallery-title {
+            font-size: 1rem !important;
+            word-break: break-word;
+        }
+
+        .nav-controls {
+            gap: 8px !important;
+        }
+
+        .nav-counter {
+            min-width: 80px !important;
+            font-size: 0.875rem !important;
+        }
+
+        .thumbnail-strip {
+            padding: 8px !important;
+        }
+
+        .thumbnail-item {
+            width: 80px !important;
+            height: 45px !important;
+        }
+
+        .gallery-info {
+            font-size: 0.75rem !important;
+        }
+
+        .play-btn {
+            width: 100%;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .main-thumbnail {
+            max-height: 30vh !important;
+        }
+
+        .main-thumbnail img {
+            max-height: 30vh !important;
+        }
+
+        .gallery-title {
+            font-size: 0.9rem !important;
+        }
+
+        .nav-counter {
+            min-width: 60px !important;
+            font-size: 0.75rem !important;
+        }
+
+        .thumbnail-item {
+            width: 60px !important;
+            height: 34px !important;
+        }
+
+        .gallery-info .mud-typography {
+            font-size: 0.7rem !important;
+        }
+    }
+</style>
+
 @code {
     [CascadingParameter]
-    private IDialogReference? MudDialog { get; set; }
+    private IMudDialogInstance? MudDialog { get; set; }
 
     [Parameter]
     public ArchivedVideo? Video { get; set; }
