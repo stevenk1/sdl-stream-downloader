@@ -13,6 +13,7 @@ public partial class StreamDownloadService
     private readonly ILogger<StreamDownloadService> _logger;
     private readonly VideoConversionService _conversionService;
     private readonly VideoDatabaseService _db;
+    private readonly IFileSystemService _fileSystem;
     private readonly Dictionary<string, (Process Process, CancellationTokenSource Cts)> _activeDownloads = new();
 
     public event EventHandler<DownloadJob>? DownloadUpdated;
@@ -21,16 +22,18 @@ public partial class StreamDownloadService
         IOptions<VideoStorageSettings> settings,
         ILogger<StreamDownloadService> logger,
         VideoDatabaseService db,
-        VideoConversionService conversionService)
+        VideoConversionService conversionService,
+        IFileSystemService fileSystem)
     {
         _settings = settings.Value;
         _logger = logger;
         _db = db;
         _conversionService = conversionService;
+        _fileSystem = fileSystem;
 
         // Ensure directories exist
-        Directory.CreateDirectory(_settings.DownloadDirectory);
-        Directory.CreateDirectory(_settings.ArchiveDirectory);
+        _fileSystem.CreateDirectory(_settings.DownloadDirectory);
+        _fileSystem.CreateDirectory(_settings.ArchiveDirectory);
     }
 
     public IEnumerable<DownloadJob> GetActiveDownloads() => _db.GetActiveDownloadJobs();
@@ -93,7 +96,7 @@ public partial class StreamDownloadService
     {
         try
         {
-            var outputTemplate = Path.Combine(_settings.DownloadDirectory, $"{job.Id}.%(ext)s");
+            var outputTemplate = _fileSystem.CombinePaths(_settings.DownloadDirectory, $"{job.Id}.%(ext)s");
 
             // Build format string based on resolution selection
             string formatString = job.Resolution.ToLower() switch
@@ -156,7 +159,7 @@ public partial class StreamDownloadService
             string? outputFile = null;
 
             // First check for .part files (incomplete downloads)
-            var partFiles = Directory.GetFiles(_settings.DownloadDirectory, $"{job.Id}.*.part");
+            var partFiles = _fileSystem.GetFiles(_settings.DownloadDirectory, $"{job.Id}.*.part");
             if (partFiles.Length > 0)
             {
                 outputFile = partFiles[0];
@@ -164,7 +167,7 @@ public partial class StreamDownloadService
             else
             {
                 // Check for completed files
-                var files = Directory.GetFiles(_settings.DownloadDirectory, $"{job.Id}.*");
+                var files = _fileSystem.GetFiles(_settings.DownloadDirectory, $"{job.Id}.*");
                 if (files.Length > 0)
                 {
                     outputFile = files[0];
@@ -198,7 +201,7 @@ public partial class StreamDownloadService
 
             // Auto-trigger conversion for completed or stopped downloads
             if ((job.Status == DownloadStatus.Completed || job.Status == DownloadStatus.Stopped) &&
-                !string.IsNullOrEmpty(outputFile) && File.Exists(outputFile))
+                !string.IsNullOrEmpty(outputFile) && _fileSystem.FileExists(outputFile))
             {
                 try
                 {

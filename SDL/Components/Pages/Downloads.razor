@@ -7,6 +7,7 @@
 @inject VideoConversionService ConversionService
 @inject VideoArchiveService ArchiveService
 @inject VideoManagementService VideoManagement
+@inject IFileSystemService FileSystem
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ILogger<Downloads> _logger
@@ -864,7 +865,7 @@
     private async Task PlayConvertedVideo(DownloadJob job)
     {
         // Check if converted file path exists
-        if (string.IsNullOrEmpty(job.ConvertedFilePath) || !File.Exists(job.ConvertedFilePath))
+        if (string.IsNullOrEmpty(job.ConvertedFilePath) || !FileSystem.FileExists(job.ConvertedFilePath))
         {
             Snackbar.Add("Converted file not found", Severity.Error);
             return;
@@ -874,7 +875,7 @@
         var video = new ArchivedVideo
         {
             Title = job.Title,
-            FileName = Path.GetFileName(job.ConvertedFilePath),
+            FileName = FileSystem.GetFileName(job.ConvertedFilePath) ?? string.Empty,
             OriginalUrl = job.Url,
             FilePath = job.ConvertedFilePath,
             Thumbnail = job.Thumbnail,

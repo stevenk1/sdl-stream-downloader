@@ -12,15 +12,17 @@ public partial class VideoConversionService
     private readonly VideoStorageSettings _settings;
     private readonly ILogger<VideoConversionService> _logger;
     private readonly VideoDatabaseService _db;
+    private readonly IFileSystemService _fileSystem;
     private readonly Dictionary<string, (Process Process, CancellationTokenSource Cts)> _activeConversions = new();
 
     public event EventHandler<ConversionJob>? ConversionUpdated;
 
-    public VideoConversionService(IOptions<VideoStorageSettings> settings, ILogger<VideoConversionService> logger, VideoDatabaseService db)
+    public VideoConversionService(IOptions<VideoStorageSettings> settings, ILogger<VideoConversionService> logger, VideoDatabaseService db, IFileSystemService fileSystem)
     {
         _settings = settings.Value;
         _logger = logger;
         _db = db;
+        _fileSystem = fileSystem;
 
         // Log loaded settings for diagnostics
         _logger.LogInformation("VideoConversionService initialized with settings:");
@@ -33,10 +35,10 @@ public partial class VideoConversionService
         _logger.LogInformation("  ConversionOutputFormat: {ConversionOutputFormat}", _settings.ConversionOutputFormat);
 
         // Ensure converted directory exists
-        Directory.CreateDirectory(_settings.ConvertedDirectory);
+        _fileSystem.CreateDirectory(_settings.ConvertedDirectory);
 
         // Ensure thumbnail directory exists
-        Directory.CreateDirectory(_settings.ThumbnailDirectory);
+        _fileSystem.CreateDirectory(_settings.ThumbnailDirectory);
     }
 
     public IEnumerable<ConversionJob> GetActiveConversions() => _db.GetActiveConversionJobs();
@@ -64,8 +66,8 @@ public partial class VideoConversionService
         };
 
         // Generate output path
-        var fileName = Path.GetFileNameWithoutExtension(downloadJob.OutputPath);
-        job.OutputPath = Path.Combine(_settings.ConvertedDirectory, $"{fileName}.{_settings.ConversionOutputFormat}");
+        var fileName = _fileSystem.GetFileNameWithoutExtension(downloadJob.OutputPath);
+        job.OutputPath = _fileSystem.CombinePaths(_settings.ConvertedDirectory, $"{fileName}.{_settings.ConversionOutputFormat}");
 
         _db.UpsertConversionJob(job);
         NotifyConversionUpdated(job);
@@ -169,15 +171,15 @@ public partial class VideoConversionService
                 job.ErrorMessage = "Conversion cancelled";
 
                 // Clean up partial output file
-                if (File.Exists(job.OutputPath))
+                if (_fileSystem.FileExists(job.OutputPath))
                 {
-                    try { File.Delete(job.OutputPath); } catch { }
+                    try { _fileSystem.FileDelete(job.OutputPath); } catch { }
                 }
 
                 // Update the corresponding DownloadJob status
                 UpdateDownloadJobAfterConversion(job.DownloadJobId, DownloadStatus.ConversionFailed, "Conversion cancelled", null, null);
             }
-            else if (process.ExitCode == 0 && File.Exists(job.OutputPath))
+            else if (process.ExitCode == 0 && _fileSystem.FileExists(job.OutputPath))
             {
                 job.Status = ConversionStatus.Completed;
                 job.Progress = 100;
@@ -390,7 +392,7 @@ public partial class VideoConversionService
             {
                 var timestamp = duration.Value * percentages[i];
                 var thumbnailFileName = $"{thumbnailId}_thumb_{i + 1:D2}.jpg";
-                var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, thumbnailFileName);
+                var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
 
                 // Build FFmpeg command to extract a single frame
                 var args = $"-ss {timestamp.ToString(CultureInfo.InvariantCulture)} " +
@@ -423,7 +425,7 @@ public partial class VideoConversionService
 
                 await process.WaitForExitAsync();
 
-                if (process.ExitCode == 0 && File.Exists(thumbnailPath))
+                if (process.ExitCode == 0 && _fileSystem.FileExists(thumbnailPath))
                 {
                     _logger.LogInformation("Thumbnail generated successfully: {ThumbnailPath}", thumbnailPath);
                     generatedThumbnails.Add(thumbnailFileName);

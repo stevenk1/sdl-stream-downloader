@@ -11,6 +11,7 @@ public class VideoDatabaseService : IDisposable
     private readonly LiteDatabase _db;
     private readonly ILogger<VideoDatabaseService> _logger;
     private readonly VideoStorageSettings _settings;
+    private readonly IFileSystemService _fileSystem;
 
     private readonly ILiteCollection<DownloadJob> _downloads;
     private readonly ILiteCollection<ConversionJob> _conversions;
@@ -18,14 +19,16 @@ public class VideoDatabaseService : IDisposable
 
     public VideoDatabaseService(
         IOptions<VideoStorageSettings> settings,
-        ILogger<VideoDatabaseService> logger)
+        ILogger<VideoDatabaseService> logger,
+        IFileSystemService fileSystem)
     {
         _settings = settings.Value;
         _logger = logger;
+        _fileSystem = fileSystem;
 
         // Create database file in the archive directory
-        var dbPath = Path.Combine(_settings.ArchiveDirectory, "videos.db");
-        Directory.CreateDirectory(_settings.ArchiveDirectory);
+        var dbPath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, "videos.db");
+        _fileSystem.CreateDirectory(_settings.ArchiveDirectory);
 
         _db = new LiteDatabase(dbPath);
 
@@ -56,17 +59,17 @@ public class VideoDatabaseService : IDisposable
             }
 
             // Try to load from old JSON file
-            var metadataPath = Path.Combine(_settings.ArchiveDirectory, _settings.MetadataFile);
-            if (File.Exists(metadataPath))
+            var metadataPath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, _settings.MetadataFile);
+            if (_fileSystem.FileExists(metadataPath))
             {
                 _logger.LogInformation("Migrating archived videos from JSON to LiteDB...");
-                var json = File.ReadAllText(metadataPath);
+                var json = _fileSystem.FileReadAllText(metadataPath);
                 var videos = System.Text.Json.JsonSerializer.Deserialize<List<ArchivedVideo>>(json);
 
                 if (videos != null && videos.Any())
                 {
                     // Verify files still exist
-                    var existingVideos = videos.Where(v => File.Exists(v.FilePath)).ToList();
+                    var existingVideos = videos.Where(v => _fileSystem.FileExists(v.FilePath)).ToList();
 
                     foreach (var video in existingVideos)
                     {
@@ -77,7 +80,7 @@ public class VideoDatabaseService : IDisposable
 
                     // Optionally backup the JSON file
                     var backupPath = metadataPath + ".backup";
-                    File.Move(metadataPath, backupPath);
+                    _fileSystem.FileMove(metadataPath, backupPath);
                     _logger.LogInformation("Backed up JSON metadata to {BackupPath}", backupPath);
                 }
             }

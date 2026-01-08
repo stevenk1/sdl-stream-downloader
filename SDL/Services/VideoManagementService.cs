@@ -11,19 +11,22 @@ public class VideoManagementService
     private readonly VideoArchiveService _archiveService;
     private readonly ILogger<VideoManagementService> _logger;
     private readonly VideoStorageSettings _settings;
+    private readonly IFileSystemService _fileSystem;
 
     public VideoManagementService(
         StreamDownloadService downloadService,
         VideoConversionService conversionService,
         VideoArchiveService archiveService,
         ILogger<VideoManagementService> logger,
-        IOptions<VideoStorageSettings> settings)
+        IOptions<VideoStorageSettings> settings,
+        IFileSystemService fileSystem)
     {
         _downloadService = downloadService;
         _conversionService = conversionService;
         _archiveService = archiveService;
         _logger = logger;
         _settings = settings.Value;
+        _fileSystem = fileSystem;
     }
 
     /// <summary>
@@ -34,13 +37,13 @@ public class VideoManagementService
         try
         {
             // Check if it's a converted job
-            bool isConverted = !string.IsNullOrEmpty(job.ConvertedFilePath) && File.Exists(job.ConvertedFilePath);
+            bool isConverted = !string.IsNullOrEmpty(job.ConvertedFilePath) && _fileSystem.FileExists(job.ConvertedFilePath);
             string? originalFilePath = job.OutputPath;
 
             if (isConverted)
             {
                 // Verify converted file exists
-                if (!File.Exists(job.ConvertedFilePath))
+                if (!_fileSystem.FileExists(job.ConvertedFilePath))
                 {
                     throw new FileNotFoundException("Converted file not found", job.ConvertedFilePath);
                 }
@@ -53,11 +56,11 @@ public class VideoManagementService
             await _archiveService.ArchiveVideoAsync(job);
 
             // If it was a conversion, clean up the original file
-            if (isConverted && !string.IsNullOrEmpty(originalFilePath) && File.Exists(originalFilePath))
+            if (isConverted && !string.IsNullOrEmpty(originalFilePath) && _fileSystem.FileExists(originalFilePath))
             {
                 try
                 {
-                    File.Delete(originalFilePath);
+                    _fileSystem.FileDelete(originalFilePath);
                     _logger.LogInformation("Deleted original file after archiving conversion: {FilePath}", originalFilePath);
                 }
                 catch (Exception ex)
@@ -91,11 +94,11 @@ public class VideoManagementService
         try
         {
             // Delete the converted file if it exists
-            if (!string.IsNullOrEmpty(job.ConvertedFilePath) && File.Exists(job.ConvertedFilePath))
+            if (!string.IsNullOrEmpty(job.ConvertedFilePath) && _fileSystem.FileExists(job.ConvertedFilePath))
             {
                 try
                 {
-                    File.Delete(job.ConvertedFilePath);
+                    _fileSystem.FileDelete(job.ConvertedFilePath);
                 }
                 catch (Exception ex)
                 {
@@ -104,11 +107,11 @@ public class VideoManagementService
             }
 
             // Delete original download file if it exists
-            if (!string.IsNullOrEmpty(job.OutputPath) && File.Exists(job.OutputPath))
+            if (!string.IsNullOrEmpty(job.OutputPath) && _fileSystem.FileExists(job.OutputPath))
             {
                 try
                 {
-                    File.Delete(job.OutputPath);
+                    _fileSystem.FileDelete(job.OutputPath);
                 }
                 catch (Exception ex)
                 {
@@ -121,12 +124,12 @@ public class VideoManagementService
             {
                 foreach (var thumbnailFileName in job.Thumbnails)
                 {
-                    var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, thumbnailFileName);
-                    if (File.Exists(thumbnailPath))
+                    var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
+                    if (_fileSystem.FileExists(thumbnailPath))
                     {
                         try
                         {
-                            File.Delete(thumbnailPath);
+                            _fileSystem.FileDelete(thumbnailPath);
                         }
                         catch (Exception ex)
                         {

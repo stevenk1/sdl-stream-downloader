@@ -11,15 +11,17 @@ public class VideoArchiveService
     private readonly ILogger<VideoArchiveService> _logger;
     private readonly VideoConversionService _conversionService;
     private readonly VideoDatabaseService _db;
+    private readonly IFileSystemService _fileSystem;
 
     public event EventHandler? ArchiveUpdated;
 
-    public VideoArchiveService(IOptions<VideoStorageSettings> settings, ILogger<VideoArchiveService> logger, VideoConversionService conversionService, VideoDatabaseService db)
+    public VideoArchiveService(IOptions<VideoStorageSettings> settings, ILogger<VideoArchiveService> logger, VideoConversionService conversionService, VideoDatabaseService db, IFileSystemService fileSystem)
     {
         _settings = settings.Value;
         _logger = logger;
         _conversionService = conversionService;
         _db = db;
+        _fileSystem = fileSystem;
     }
 
     public Task<IEnumerable<ArchivedVideo>> GetArchivedVideosAsync()
@@ -29,42 +31,42 @@ public class VideoArchiveService
 
     public async Task<ArchivedVideo> ArchiveVideoAsync(DownloadJob completedJob)
     {
-        if (string.IsNullOrEmpty(completedJob.OutputPath) || !File.Exists(completedJob.OutputPath))
+        if (string.IsNullOrEmpty(completedJob.OutputPath) || !_fileSystem.FileExists(completedJob.OutputPath))
         {
             throw new FileNotFoundException("Download file not found", completedJob.OutputPath);
         }
 
         // Move file to archive directory
-        var fileName = Path.GetFileName(completedJob.OutputPath);
+        var fileName = _fileSystem.GetFileName(completedJob.OutputPath);
 
         // Remove .part extension for stopped downloads
-        if (fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase))
+        if (fileName != null && fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase))
         {
             fileName = fileName.Substring(0, fileName.Length - 5);
         }
 
-        var archivePath = Path.Combine(_settings.ArchiveDirectory, fileName);
+        var archivePath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, fileName!);
 
         // If file already exists in archive, generate unique name
-        if (File.Exists(archivePath))
+        if (_fileSystem.FileExists(archivePath))
         {
-            var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
-            var extension = Path.GetExtension(fileName);
+            var nameWithoutExt = _fileSystem.GetFileNameWithoutExtension(fileName);
+            var extension = _fileSystem.GetExtension(fileName!);
             fileName = $"{nameWithoutExt}_{DateTime.Now:yyyyMMddHHmmss}{extension}";
-            archivePath = Path.Combine(_settings.ArchiveDirectory, fileName);
+            archivePath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, fileName);
         }
 
-        File.Move(completedJob.OutputPath, archivePath);
+        _fileSystem.FileMove(completedJob.OutputPath, archivePath);
 
-        var fileInfo = new FileInfo(archivePath);
+        var fileLength = _fileSystem.GetFileLength(archivePath);
 
         var video = new ArchivedVideo
         {
             Title = completedJob.Title,
             OriginalUrl = completedJob.Url,
             FilePath = archivePath,
-            FileName = fileName,
-            FileSizeBytes = fileInfo.Length,
+            FileName = fileName!,
+            FileSizeBytes = fileLength,
             ArchivedAt = DateTime.Now
         };
 
@@ -100,9 +102,9 @@ public class VideoArchiveService
                 return Task.FromResult(false);
 
             // Delete file
-            if (File.Exists(video.FilePath))
+            if (_fileSystem.FileExists(video.FilePath))
             {
-                File.Delete(video.FilePath);
+                _fileSystem.FileDelete(video.FilePath);
             }
 
             // Delete all thumbnails if they exist
@@ -112,12 +114,12 @@ public class VideoArchiveService
 
             foreach (var thumbnailFileName in thumbnailsToDelete)
             {
-                var thumbnailPath = Path.Combine(_settings.ThumbnailDirectory, thumbnailFileName);
-                if (File.Exists(thumbnailPath))
+                var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
+                if (_fileSystem.FileExists(thumbnailPath))
                 {
                     try
                     {
-                        File.Delete(thumbnailPath);
+                        _fileSystem.FileDelete(thumbnailPath);
                         _logger.LogInformation("Deleted thumbnail for video {VideoId}: {ThumbnailFileName}",
                             video.Id, thumbnailFileName);
                     }
