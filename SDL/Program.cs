@@ -20,6 +20,7 @@ builder.Services.AddSingleton<VideoDatabaseService>();
 builder.Services.AddSingleton<VideoConversionService>();
 builder.Services.AddSingleton<StreamDownloadService>();
 builder.Services.AddSingleton<VideoArchiveService>();
+builder.Services.AddSingleton<VideoManagementService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

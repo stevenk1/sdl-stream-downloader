@@ -6,6 +6,7 @@
 @inject StreamDownloadService DownloadService
 @inject VideoConversionService ConversionService
 @inject VideoArchiveService ArchiveService
+@inject VideoManagementService VideoManagement
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ILogger<Downloads> _logger
@@ -811,8 +812,7 @@
     {
         try
         {
-            await ArchiveService.ArchiveVideoAsync(job);
-            DownloadService.RemoveDownloadJob(job.Id);
+            await VideoManagement.ArchiveJobAsync(job);
             RefreshData();
             Snackbar.Add("Video archived successfully", Severity.Success);
         }
@@ -900,44 +900,7 @@
     {
         try
         {
-            // Check if converted file path exists
-            if (string.IsNullOrEmpty(job.ConvertedFilePath) || !File.Exists(job.ConvertedFilePath))
-            {
-                Snackbar.Add("Converted file not found", Severity.Error);
-                return;
-            }
-
-            // Store original file path before updating
-            var originalFilePath = job.OutputPath;
-
-            // Update the job's OutputPath to point to the converted file
-            job.OutputPath = job.ConvertedFilePath;
-
-            await ArchiveService.ArchiveVideoAsync(job);
-
-            // Delete the original download file since we're keeping only the converted version
-            if (!string.IsNullOrEmpty(originalFilePath) && File.Exists(originalFilePath))
-            {
-                try
-                {
-                    File.Delete(originalFilePath);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete original file after archiving conversion: {FilePath}", originalFilePath);
-                }
-            }
-
-            // Remove from database
-            DownloadService.RemoveDownloadJob(job.Id);
-
-            // Clean up conversion job if it exists
-            var conversion = ConversionService.GetConversionByDownloadJobId(job.Id);
-            if (conversion != null)
-            {
-                ConversionService.RemoveConversionJob(conversion.Id);
-            }
-
+            await VideoManagement.ArchiveJobAsync(job);
             RefreshData();
             Snackbar.Add("Video archived successfully", Severity.Success);
         }
@@ -959,45 +922,7 @@
         {
             try
             {
-                // Delete the converted file if it exists
-                if (!string.IsNullOrEmpty(job.ConvertedFilePath) && File.Exists(job.ConvertedFilePath))
-                {
-                    File.Delete(job.ConvertedFilePath);
-                }
-
-                // Delete original download file if it exists
-                if (!string.IsNullOrEmpty(job.OutputPath) && File.Exists(job.OutputPath))
-                {
-                    File.Delete(job.OutputPath);
-                }
-
-                // Delete thumbnails if they exist
-                foreach (var thumbnailFileName in job.Thumbnails)
-                {
-                    var thumbnailPath = Path.Combine("wwwroot/thumbnails", thumbnailFileName);
-                    if (File.Exists(thumbnailPath))
-                    {
-                        try
-                        {
-                            File.Delete(thumbnailPath);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to delete thumbnail {ThumbnailPath}", thumbnailPath);
-                        }
-                    }
-                }
-
-                // Remove from database
-                DownloadService.RemoveDownloadJob(job.Id);
-
-                // Clean up conversion job if it exists
-                var conversion = ConversionService.GetConversionByDownloadJobId(job.Id);
-                if (conversion != null)
-                {
-                    ConversionService.RemoveConversionJob(conversion.Id);
-                }
-
+                await VideoManagement.DeleteJobAsync(job);
                 RefreshData();
                 Snackbar.Add("Video deleted successfully", Severity.Success);
             }
