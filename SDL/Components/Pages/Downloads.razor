@@ -414,7 +414,7 @@
                                         <MudButton Variant="Variant.Filled"
                                                    Color="Color.Success"
                                                    Size="Size.Medium"
-                                                   OnClick="() => ArchiveConvertedVideo(job)"
+                                                   OnClick="() => ArchiveJob(job)"
                                                    StartIcon="@Icons.Material.Filled.Archive"
                                                    Class="action-btn"
                                                    Style="border-radius: 10px; text-transform: none; font-weight: 500;">
@@ -910,19 +910,6 @@
         await DialogService.ShowAsync<VideoPlayerDialog>("Play Video", parameters, options);
     }
 
-    private async Task ArchiveConvertedVideo(DownloadJob job)
-    {
-        try
-        {
-            await VideoManagement.ArchiveJobAsync(job);
-            RefreshData();
-            Snackbar.Add("Video archived successfully", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to archive video: {ex.Message}", Severity.Error);
-        }
-    }
 
     private async Task DeleteJob(DownloadJob job)
     {
