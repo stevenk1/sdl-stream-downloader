@@ -4,14 +4,18 @@ WORKDIR /app
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
-# Install dependencies: ffmpeg, python3, and yt-dlp binary
+# Install dependencies: ffmpeg, python3, yt-dlp, and deno
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
     curl \
     ca-certificates \
+    unzip \
     && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/bin/yt-dlp \
     && chmod a+rx /usr/bin/yt-dlp \
+    && curl -fsSL https://deno.land/install.sh | sh \
+    && mv /root/.deno/bin/deno /usr/bin/deno \
+    && rm -rf /root/.deno \
     && rm -rf /var/lib/apt/lists/*
 
 # Build stage
