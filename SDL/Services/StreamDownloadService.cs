@@ -114,7 +114,7 @@ public partial class StreamDownloadService
                     .Add("--print-json")
                     .Add("--progress")
                     .Add("--newline")
-                    .Add("--retry-sleep").Add("http:exp=2:45")
+                    .Add("--retry-sleep").Add("http:exp=10:120")
                     .Add(job.Url));
 
             _logger.LogInformation("Starting download for {JobId} using yt-dlp: {Command}", job.Id, cmd.ToString());
