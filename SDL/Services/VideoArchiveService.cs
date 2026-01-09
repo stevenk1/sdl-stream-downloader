@@ -29,6 +29,16 @@ public class VideoArchiveService
         return Task.FromResult(_db.GetAllArchivedVideos());
     }
 
+    public Task<(IEnumerable<ArchivedVideo> Items, int TotalCount)> GetArchivedVideosFilteredAsync(int skip, int limit, string? sortBy, bool descending, string? search)
+    {
+        return Task.FromResult(_db.GetArchivedVideosFiltered(skip, limit, sortBy, descending, search));
+    }
+
+    public Task<int> GetArchivedCountAsync()
+    {
+        return Task.FromResult(_db.GetArchivedVideoCount());
+    }
+
     public async Task<ArchivedVideo> ArchiveVideoAsync(DownloadJob completedJob)
     {
         if (string.IsNullOrEmpty(completedJob.OutputPath) || !_fileSystem.FileExists(completedJob.OutputPath))

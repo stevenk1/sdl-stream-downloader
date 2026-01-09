@@ -42,6 +42,7 @@ public class VideoDatabaseService : IDisposable
         _conversions.EnsureIndex(x => x.Status);
         _conversions.EnsureIndex(x => x.DownloadJobId);
         _archives.EnsureIndex(x => x.ArchivedAt);
+        _archives.EnsureIndex(x => x.Title);
 
         // Migrate existing JSON data on first run
         MigrateFromJson();
@@ -151,6 +152,37 @@ public class VideoDatabaseService : IDisposable
     public void UpsertArchivedVideo(ArchivedVideo video) => _archives.Upsert(video);
 
     public bool DeleteArchivedVideo(string id) => _archives.Delete(id);
+
+    public (IEnumerable<ArchivedVideo> Items, int TotalCount) GetArchivedVideosFiltered(int skip, int limit, string? sortBy, bool descending, string? search)
+    {
+        var query = _archives.Query();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            // LiteDB doesn't support StringComparison in expressions easily, so we use lowercase if needed or just simple contains
+            // For now, let's keep it simple.
+            query = query.Where(x => x.Title.Contains(search) || x.OriginalUrl.Contains(search));
+        }
+
+        if (!string.IsNullOrWhiteSpace(sortBy))
+        {
+            if (descending)
+                query = query.OrderByDescending(BsonExpression.Create(sortBy));
+            else
+                query = query.OrderBy(BsonExpression.Create(sortBy));
+        }
+        else
+        {
+            query = query.OrderByDescending(x => x.ArchivedAt);
+        }
+
+        var totalCount = query.Count();
+        var items = query.Skip(skip).Limit(limit).ToList();
+
+        return (items, totalCount);
+    }
+
+    public int GetArchivedVideoCount() => _archives.Count();
 
     // Transaction support
     public void BeginTransaction() => _db.BeginTrans();

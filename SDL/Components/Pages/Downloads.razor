@@ -456,14 +456,16 @@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-bottom: 20px;">
         <MudIcon Icon="@Icons.Material.Filled.Archive" Color="Color.Secondary"/>
         <MudText Typo="Typo.h5" Style="font-weight: 600; margin: 0;">Archived Videos</MudText>
-        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@_archivedVideos.Count</MudChip>
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@_archivedCount</MudChip>
     </MudStack>
     <MudPaper Elevation="0"
               Style="background: rgba(255, 255, 255, 0.02);
                      border-radius: 20px;
                      padding: 24px;
                      border: 1px solid rgba(126, 111, 255, 0.1);">
-        <MudDataGrid Items="_archivedVideos"
+        <MudDataGrid T="ArchivedVideo"
+                     @ref="_archivedGrid"
+                     ServerData="LoadArchivedVideos"
                      Filterable="true"
                      FilterMode="DataGridFilterMode.Simple"
                      SortMode="SortMode.Multiple"
@@ -556,6 +558,9 @@
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ArchivedVideo" />
+            </PagerContent>
         </MudDataGrid>
     </MudPaper>
 </MudContainer>
@@ -746,48 +751,88 @@
     private List<DownloadJob> _activeDownloads = new();
     private List<DownloadJob> _convertedDownloads = new();
     private List<ConversionJob> _activeConversions = new();
-    private List<ArchivedVideo> _archivedVideos = new();
+    private MudDataGrid<ArchivedVideo>? _archivedGrid;
+    private int _archivedCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
-        RefreshData();
+        await RefreshData();
 
         DownloadService.DownloadUpdated += OnDownloadUpdated;
         ConversionService.ConversionUpdated += OnConversionUpdated;
         ArchiveService.ArchiveUpdated += OnArchiveUpdated;
     }
 
-    private void RefreshData()
+    private async Task RefreshData()
     {
         _activeDownloads = DownloadService.GetActiveDownloads().ToList();
         _convertedDownloads = DownloadService.GetConvertedJobs().ToList();
         _activeConversions = ConversionService.GetActiveConversions().ToList();
-        _archivedVideos = ArchiveService.GetArchivedVideosAsync().Result.ToList();
+        _archivedCount = await ArchiveService.GetArchivedCountAsync();
+        
+        if (_archivedGrid != null)
+        {
+            await _archivedGrid.ReloadServerData();
+        }
+    }
+
+    private async Task<GridData<ArchivedVideo>> LoadArchivedVideos(GridState<ArchivedVideo> state)
+    {
+        var sortBy = state.SortDefinitions.FirstOrDefault()?.SortBy;
+        var descending = state.SortDefinitions.FirstOrDefault()?.Descending ?? true;
+        
+        // Use the first filter value if available
+        string? search = state.FilterDefinitions.FirstOrDefault()?.Value?.ToString();
+
+        var result = await ArchiveService.GetArchivedVideosFilteredAsync(
+            state.Page * state.PageSize, 
+            state.PageSize, 
+            sortBy, 
+            descending, 
+            search);
+
+        return new GridData<ArchivedVideo>
+        {
+            Items = result.Items,
+            TotalItems = result.TotalCount
+        };
     }
 
     private async void OnDownloadUpdated(object? sender, DownloadJob job)
     {
-        await InvokeAsync(() =>
+        await InvokeAsync(async () =>
         {
-            RefreshData();
+            // If it's just a progress update for an existing job, we can optimize
+            var existing = _activeDownloads.FirstOrDefault(j => j.Id == job.Id);
+            if (existing != null && job.Status == DownloadStatus.Downloading && existing.Status == DownloadStatus.Downloading)
+            {
+                existing.Progress = job.Progress;
+                existing.Speed = job.Speed;
+                existing.Eta = job.Eta;
+                existing.Title = job.Title;
+            }
+            else
+            {
+                await RefreshData();
+            }
             StateHasChanged();
         });
     }
 
     private async void OnConversionUpdated(object? sender, ConversionJob job)
     {
-        await InvokeAsync(() =>
+        await InvokeAsync(async () =>
         {
-            RefreshData();
+            await RefreshData();
             StateHasChanged();
         });
     }
 
     private async void OnArchiveUpdated(object? sender, EventArgs e)
     {
-        await InvokeAsync(() =>
+        await InvokeAsync(async () =>
         {
-            RefreshData();
+            await RefreshData();
             StateHasChanged();
         });
     }

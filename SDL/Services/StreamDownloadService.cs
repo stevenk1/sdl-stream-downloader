@@ -96,7 +96,7 @@ public partial class StreamDownloadService
             var outputTemplate = _fileSystem.CombinePaths(_settings.DownloadDirectory, filename);
 
             // Build format string based on resolution selection
-            string formatString = job.Resolution.ToLower() switch
+            var formatString = job.Resolution.ToLower() switch
             {
                 "1080p" => $"bestvideo[height<=1080][ext={_settings.OutputFormat}]/bestvideo[height<=1080]+bestaudio/best[height<=1080]",
                 "720p" => $"bestvideo[height<=720][ext={_settings.OutputFormat}]/bestvideo[height<=720]+bestaudio/best[height<=720]",
@@ -114,6 +114,7 @@ public partial class StreamDownloadService
                     .Add("--print-json")
                     .Add("--progress")
                     .Add("--newline")
+                    .Add("--retry-sleep").Add("http:exp=2:45")
                     .Add(job.Url));
 
             _logger.LogInformation("Starting download for {JobId} using yt-dlp: {Command}", job.Id, cmd.ToString());
@@ -195,15 +196,34 @@ public partial class StreamDownloadService
             {
                 try
                 {
-                    job.Status = DownloadStatus.Converting;
-                    NotifyDownloadUpdated(job);
-                    await _conversionService.StartConversionAsync(job);
+                    if (IsFormatWebPlayable(outputFile))
+                    {
+                        _logger.LogInformation("Skipping conversion for {JobId} as it is already in a web-playable format: {FilePath}", job.Id, outputFile);
+                        
+                        // We still need thumbnails for the UI
+                        var thumbnails = await _conversionService.GenerateMultipleThumbnailsAsync(outputFile, job.Id);
+                        
+                        job.Status = DownloadStatus.ConversionCompleted;
+                        job.ConvertedFilePath = outputFile;
+                        if (thumbnails != null && thumbnails.Any())
+                        {
+                            job.Thumbnails = thumbnails;
+                            job.Thumbnail = thumbnails.First();
+                        }
+                        NotifyDownloadUpdated(job);
+                    }
+                    else
+                    {
+                        job.Status = DownloadStatus.Converting;
+                        NotifyDownloadUpdated(job);
+                        await _conversionService.StartConversionAsync(job);
+                    }
                 }
                 catch (Exception convEx)
                 {
-                    _logger.LogError(convEx, "Error starting conversion for job {JobId}", job.Id);
+                    _logger.LogError(convEx, "Error processing/starting conversion for job {JobId}", job.Id);
                     job.Status = DownloadStatus.ConversionFailed;
-                    job.ErrorMessage = $"Conversion failed to start: {convEx.Message}";
+                    job.ErrorMessage = $"Processing failed: {convEx.Message}";
                     NotifyDownloadUpdated(job);
                 }
             }
@@ -219,6 +239,16 @@ public partial class StreamDownloadService
         {
             _activeDownloads.Remove(job.Id);
         }
+    }
+
+    private bool IsFormatWebPlayable(string filePath)
+    {
+        var extension = _fileSystem.GetExtension(filePath).ToLowerInvariant();
+        return extension switch
+        {
+            ".mp4" or ".webm" or ".mp3" or ".m4a" or ".aac" or ".ogg" or ".opus" or ".wav" => true,
+            _ => false
+        };
     }
 
     private void ParseYtDlpOutput(DownloadJob job, string output)
