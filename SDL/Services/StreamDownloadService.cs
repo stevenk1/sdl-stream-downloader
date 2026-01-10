@@ -44,6 +44,8 @@ public partial class StreamDownloadService
 
     public IEnumerable<DownloadJob> GetConvertedJobs() => _db.GetConvertedJobs();
 
+    public IEnumerable<DownloadJob> GetAllJobs() => _db.GetAllDownloadJobs();
+
     public void RemoveDownloadJob(string jobId)
     {
         _db.DeleteDownloadJob(jobId);
@@ -291,7 +293,7 @@ public partial class StreamDownloadService
         }
     }
 
-    private void NotifyDownloadUpdated(DownloadJob job)
+    public void NotifyDownloadUpdated(DownloadJob job)
     {
         _db.UpsertDownloadJob(job);
         DownloadUpdated?.Invoke(this, job);

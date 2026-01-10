@@ -39,15 +39,19 @@ public class VideoArchiveService
         return Task.FromResult(_db.GetArchivedVideoCount());
     }
 
-    public async Task<ArchivedVideo> ArchiveVideoAsync(DownloadJob completedJob)
+    public async Task<ArchivedVideo> ArchiveVideoAsync(DownloadJob completedJob, string filePath, Action<DownloadJob>? onProgress = null)
     {
-        if (string.IsNullOrEmpty(completedJob.OutputPath) || !_fileSystem.FileExists(completedJob.OutputPath))
+        completedJob.Status = DownloadStatus.Archiving;
+        completedJob.Progress = 0;
+        onProgress?.Invoke(completedJob);
+
+        if (string.IsNullOrEmpty(filePath) || !_fileSystem.FileExists(filePath))
         {
-            throw new FileNotFoundException("Download file not found", completedJob.OutputPath);
+            throw new FileNotFoundException("Download file not found", filePath);
         }
 
         // Move file to archive directory
-        var fileName = _fileSystem.GetFileName(completedJob.OutputPath);
+        var fileName = _fileSystem.GetFileName(filePath);
 
         // Remove .part extension for stopped downloads
         if (fileName != null && fileName.EndsWith(".part", StringComparison.OrdinalIgnoreCase))
@@ -66,7 +70,13 @@ public class VideoArchiveService
             archivePath = _fileSystem.CombinePaths(_settings.ArchiveDirectory, fileName);
         }
 
-        _fileSystem.FileMove(completedJob.OutputPath, archivePath);
+        completedJob.Progress = 10;
+        onProgress?.Invoke(completedJob);
+
+        _fileSystem.FileMove(filePath, archivePath);
+
+        completedJob.Progress = 20;
+        onProgress?.Invoke(completedJob);
 
         var fileLength = _fileSystem.GetFileLength(archivePath);
 
@@ -83,13 +93,45 @@ public class VideoArchiveService
         // Generate thumbnails for the archived video
         try
         {
-            var thumbnailFileNames = await _conversionService.GenerateMultipleThumbnailsAsync(archivePath, video.Id);
-            if (thumbnailFileNames != null && thumbnailFileNames.Any())
+            // We'll update progress for each thumbnail (there are usually 6)
+            // Progress will go from 20% to 90%
+            var duration = await _conversionService.GetVideoDurationAsync(archivePath);
+            if (duration.HasValue && duration.Value > 0)
             {
-                video.Thumbnails = thumbnailFileNames;
-                video.Thumbnail = thumbnailFileNames.First(); // Backward compatibility
-                _logger.LogInformation("Generated {Count} thumbnails for archived video {VideoId}",
-                    thumbnailFileNames.Count, video.Id);
+                var percentages = new[] { 0.10, 0.25, 0.40, 0.55, 0.70, 0.85 };
+                var generatedThumbnails = new List<string>();
+
+                for (int i = 0; i < percentages.Length; i++)
+                {
+                    var timestamp = duration.Value * percentages[i];
+                    var thumbnailFileName = _settings.ThumbnailFilenameTemplate
+                        .Replace("{id}", video.Id)
+                        .Replace("{index:D2}", (i + 1).ToString("D2"));
+                    
+                    var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
+
+                    _logger.LogInformation("Generating thumbnail {Index}/{Total} during archive: {FfmpegPath} at {Timestamp}s",
+                        i + 1, percentages.Length, _settings.FfmpegPath, timestamp);
+
+                    // We need a way to generate a single thumbnail without the full loop in VideoConversionService
+                    // Or we can just use the loop if we want to keep it simple, but then we don't get fine-grained progress.
+                    // Let's add GenerateSingleThumbnailAsync to VideoConversionService.
+                    
+                    var thumbnailName = await _conversionService.GenerateSingleThumbnailAsync(archivePath, video.Id, i, timestamp);
+                    if (thumbnailName != null)
+                    {
+                        generatedThumbnails.Add(thumbnailName);
+                    }
+
+                    completedJob.Progress = 20 + ((i + 1) * 70 / percentages.Length);
+                    onProgress?.Invoke(completedJob);
+                }
+
+                if (generatedThumbnails.Any())
+                {
+                    video.Thumbnails = generatedThumbnails;
+                    video.Thumbnail = generatedThumbnails.First();
+                }
             }
         }
         catch (Exception ex)
@@ -97,6 +139,9 @@ public class VideoArchiveService
             _logger.LogError(ex, "Failed to generate thumbnails for archived video {VideoId}", video.Id);
             // Don't fail the archiving if thumbnail generation fails
         }
+
+        completedJob.Progress = 100;
+        onProgress?.Invoke(completedJob);
 
         _db.UpsertArchivedVideo(video);
         NotifyArchiveUpdated();

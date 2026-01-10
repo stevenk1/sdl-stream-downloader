@@ -32,5 +32,8 @@ public enum DownloadStatus
     Stopped,
     Converting,
     ConversionCompleted,
-    ConversionFailed
+    ConversionFailed,
+    Archiving,
+    Archived,
+    ArchivingFailed
 }

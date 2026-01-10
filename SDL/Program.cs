@@ -23,6 +23,7 @@ builder.Services.AddSingleton<VideoDatabaseService>();
 // Register task queues
 builder.Services.AddSingleton<IDownloadQueue, DownloadQueue>();
 builder.Services.AddSingleton<IConversionQueue, ConversionQueue>();
+builder.Services.AddSingleton<IArchiveQueue, ArchiveQueue>();
 
 builder.Services.AddSingleton<VideoConversionService>();
 builder.Services.AddSingleton<StreamDownloadService>();
@@ -32,6 +33,7 @@ builder.Services.AddSingleton<VideoManagementService>();
 // Register background workers
 builder.Services.AddHostedService<DownloadBackgroundService>();
 builder.Services.AddHostedService<ConversionBackgroundService>();
+builder.Services.AddHostedService<ArchiveBackgroundService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

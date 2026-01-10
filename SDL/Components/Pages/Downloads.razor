@@ -103,7 +103,8 @@
         var downloadingJobs = _activeDownloads
             .Where(d => d.Status != DownloadStatus.Converting &&
                         d.Status != DownloadStatus.ConversionCompleted &&
-                        d.Status != DownloadStatus.ConversionFailed)
+                        d.Status != DownloadStatus.ConversionFailed &&
+                        d.Status != DownloadStatus.Archived)
             .ToList();
     }
 
@@ -154,7 +155,7 @@
                                     </MudStack>
                                 </MudStack>
 
-                                @if (job.Status == DownloadStatus.Downloading || job.Status == DownloadStatus.Processing)
+                                @if (job.Status == DownloadStatus.Downloading || job.Status == DownloadStatus.Processing || job.Status == DownloadStatus.Archiving)
                                 {
                                     <MudStack Spacing="2">
                                         <MudProgressLinear Value="@job.Progress"
@@ -804,7 +805,7 @@
         {
             // If it's just a progress update for an existing job, we can optimize
             var existing = _activeDownloads.FirstOrDefault(j => j.Id == job.Id);
-            if (existing != null && job.Status == DownloadStatus.Downloading && existing.Status == DownloadStatus.Downloading)
+            if (existing != null && (job.Status == DownloadStatus.Downloading || job.Status == DownloadStatus.Archiving) && existing.Status == job.Status)
             {
                 existing.Progress = job.Progress;
                 existing.Speed = job.Speed;
@@ -990,6 +991,9 @@
         DownloadStatus.Converting => Color.Info,
         DownloadStatus.ConversionCompleted => Color.Success,
         DownloadStatus.ConversionFailed => Color.Error,
+        DownloadStatus.Archiving => Color.Info,
+        DownloadStatus.Archived => Color.Success,
+        DownloadStatus.ArchivingFailed => Color.Error,
         _ => Color.Default
     };
 
@@ -1004,6 +1008,9 @@
         DownloadStatus.Converting => Icons.Material.Filled.Transform,
         DownloadStatus.ConversionCompleted => Icons.Material.Filled.CheckCircle,
         DownloadStatus.ConversionFailed => Icons.Material.Filled.Error,
+        DownloadStatus.Archiving => Icons.Material.Filled.Archive,
+        DownloadStatus.Archived => Icons.Material.Filled.CheckCircle,
+        DownloadStatus.ArchivingFailed => Icons.Material.Filled.Error,
         _ => Icons.Material.Filled.Circle
     };
 

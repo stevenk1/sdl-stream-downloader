@@ -12,6 +12,7 @@ public class VideoManagementService
     private readonly ILogger<VideoManagementService> _logger;
     private readonly VideoStorageSettings _settings;
     private readonly IFileSystemService _fileSystem;
+    private readonly IArchiveQueue _archiveQueue;
 
     public VideoManagementService(
         StreamDownloadService downloadService,
@@ -19,7 +20,8 @@ public class VideoManagementService
         VideoArchiveService archiveService,
         ILogger<VideoManagementService> logger,
         IOptions<VideoStorageSettings> settings,
-        IFileSystemService fileSystem)
+        IFileSystemService fileSystem,
+        IArchiveQueue archiveQueue)
     {
         _downloadService = downloadService;
         _conversionService = conversionService;
@@ -27,18 +29,33 @@ public class VideoManagementService
         _logger = logger;
         _settings = settings.Value;
         _fileSystem = fileSystem;
+        _archiveQueue = archiveQueue;
     }
 
     /// <summary>
     /// Archives a download job, handling both normal and converted videos.
+    /// This queues the job for background archiving.
     /// </summary>
     public async Task ArchiveJobAsync(DownloadJob job)
+    {
+        job.Status = DownloadStatus.Archiving;
+        job.Progress = 0;
+        _downloadService.NotifyDownloadUpdated(job);
+        
+        await _archiveQueue.QueueArchiveAsync(job);
+        _logger.LogInformation("Queued job {JobId} for archiving", job.Id);
+    }
+
+    /// <summary>
+    /// Executes the actual archiving process.
+    /// </summary>
+    public async Task ExecuteArchiveAsync(DownloadJob job)
     {
         try
         {
             // Check if it's a converted job
             bool isConverted = !string.IsNullOrEmpty(job.ConvertedFilePath) && _fileSystem.FileExists(job.ConvertedFilePath);
-            string? originalFilePath = job.OutputPath;
+            string fileToArchive = job.OutputPath;
 
             if (isConverted)
             {
@@ -48,41 +65,38 @@ public class VideoManagementService
                     throw new FileNotFoundException("Converted file not found", job.ConvertedFilePath);
                 }
 
-                // Update the job's OutputPath to point to the converted file for archiving
-                job.OutputPath = job.ConvertedFilePath!;
+                // Use the converted file for archiving
+                fileToArchive = job.ConvertedFilePath!;
             }
 
             // Perform the archiving
-            await _archiveService.ArchiveVideoAsync(job);
+            await _archiveService.ArchiveVideoAsync(job, fileToArchive, j => _downloadService.NotifyDownloadUpdated(j));
 
             // If it was a conversion, clean up the original file
-            if (isConverted && !string.IsNullOrEmpty(originalFilePath) && _fileSystem.FileExists(originalFilePath))
+            if (isConverted && !string.IsNullOrEmpty(job.OutputPath) && _fileSystem.FileExists(job.OutputPath))
             {
                 try
                 {
-                    _fileSystem.FileDelete(originalFilePath);
-                    _logger.LogInformation("Deleted original file after archiving conversion: {FilePath}", originalFilePath);
+                    _fileSystem.FileDelete(job.OutputPath);
+                    _logger.LogInformation("Deleted original file after archiving conversion: {FilePath}", job.OutputPath);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to delete original file after archiving conversion: {FilePath}", originalFilePath);
+                    _logger.LogWarning(ex, "Failed to delete original file after archiving conversion: {FilePath}", job.OutputPath);
                 }
             }
 
             // Clean up the job from active/converted lists
             _downloadService.RemoveDownloadJob(job.Id);
-
-            // Clean up associated conversion job if any
-            var conversion = _conversionService.GetConversionByDownloadJobId(job.Id);
-            if (conversion != null)
-            {
-                _conversionService.RemoveConversionJob(conversion.Id);
-            }
+            job.Status = DownloadStatus.Archived;
+            _downloadService.NotifyDownloadUpdated(job);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to archive job {JobId}", job.Id);
-            throw;
+            job.Status = DownloadStatus.ArchivingFailed;
+            job.ErrorMessage = ex.Message;
+            _downloadService.NotifyDownloadUpdated(job);
         }
     }
 
@@ -141,13 +155,6 @@ public class VideoManagementService
 
             // Remove from database
             _downloadService.RemoveDownloadJob(job.Id);
-
-            // Clean up conversion job if it exists
-            var conversion = _conversionService.GetConversionByDownloadJobId(job.Id);
-            if (conversion != null)
-            {
-                _conversionService.RemoveConversionJob(conversion.Id);
-            }
         }
         catch (Exception ex)
         {

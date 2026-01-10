@@ -101,7 +101,8 @@ public class VideoDatabaseService : IDisposable
     {
         return _downloads.Find(x =>
             x.Status != DownloadStatus.ConversionCompleted &&
-            x.Status != DownloadStatus.ConversionFailed);
+            x.Status != DownloadStatus.ConversionFailed &&
+            x.Status != DownloadStatus.Archived);
     }
 
     public IEnumerable<DownloadJob> GetConvertedJobs()

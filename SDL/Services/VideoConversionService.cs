@@ -262,7 +262,7 @@ public partial class VideoConversionService
         }
     }
 
-    private async Task<double?> GetVideoDurationAsync(string videoPath)
+    public async Task<double?> GetVideoDurationAsync(string videoPath)
     {
         try
         {
@@ -367,34 +367,10 @@ public partial class VideoConversionService
             for (int i = 0; i < percentages.Length; i++)
             {
                 var timestamp = duration.Value * percentages[i];
-                var thumbnailFileName = _settings.ThumbnailFilenameTemplate
-                    .Replace("{id}", thumbnailId)
-                    .Replace("{index:D2}", (i + 1).ToString("D2"));
-                
-                var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
-
-                _logger.LogInformation("Generating thumbnail {Index}/{Total}: {FfmpegPath} at {Timestamp}s",
-                    i + 1, percentages.Length, _settings.FfmpegPath, timestamp);
-
-                var result = await Cli.Wrap(_settings.FfmpegPath)
-                    .WithArguments(args => args
-                        .Add("-ss").Add(timestamp.ToString(CultureInfo.InvariantCulture))
-                        .Add("-i").Add(videoPath)
-                        .Add("-vframes").Add("1")
-                        .Add("-vf").Add("scale=1280:-1")
-                        .Add("-q:v").Add("2")
-                        .Add("-y")
-                        .Add(thumbnailPath))
-                    .ExecuteAsync();
-
-                if (result.ExitCode == 0 && _fileSystem.FileExists(thumbnailPath))
+                var thumbnailName = await GenerateSingleThumbnailAsync(videoPath, thumbnailId, i, timestamp);
+                if (thumbnailName != null)
                 {
-                    _logger.LogInformation("Thumbnail generated successfully: {ThumbnailPath}", thumbnailPath);
-                    generatedThumbnails.Add(thumbnailFileName);
-                }
-                else
-                {
-                    _logger.LogError("Thumbnail generation failed with exit code {ExitCode}", result.ExitCode);
+                    generatedThumbnails.Add(thumbnailName);
                 }
             }
 
@@ -403,6 +379,48 @@ public partial class VideoConversionService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating thumbnails for {VideoPath}", videoPath);
+            return null;
+        }
+    }
+
+    public async Task<string?> GenerateSingleThumbnailAsync(string videoPath, string thumbnailId, int index, double timestamp)
+    {
+        try
+        {
+            var thumbnailFileName = _settings.ThumbnailFilenameTemplate
+                .Replace("{id}", thumbnailId)
+                .Replace("{index:D2}", (index + 1).ToString("D2"));
+            
+            var thumbnailPath = _fileSystem.CombinePaths(_settings.ThumbnailDirectory, thumbnailFileName);
+
+            _logger.LogInformation("Generating thumbnail {Index}: {FfmpegPath} at {Timestamp}s",
+                index + 1, _settings.FfmpegPath, timestamp);
+
+            var result = await Cli.Wrap(_settings.FfmpegPath)
+                .WithArguments(args => args
+                    .Add("-ss").Add(timestamp.ToString(CultureInfo.InvariantCulture))
+                    .Add("-i").Add(videoPath)
+                    .Add("-vframes").Add("1")
+                    .Add("-vf").Add("scale=1280:-1")
+                    .Add("-q:v").Add("2")
+                    .Add("-y")
+                    .Add(thumbnailPath))
+                .ExecuteAsync();
+
+            if (result.ExitCode == 0 && _fileSystem.FileExists(thumbnailPath))
+            {
+                _logger.LogInformation("Thumbnail generated successfully: {ThumbnailPath}", thumbnailPath);
+                return thumbnailFileName;
+            }
+            else
+            {
+                _logger.LogError("Thumbnail generation failed with exit code {ExitCode}", result.ExitCode);
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating thumbnail {Index} for {VideoPath}", index + 1, videoPath);
             return null;
         }
     }
