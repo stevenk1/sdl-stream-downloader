@@ -2,7 +2,11 @@ using Microsoft.Extensions.Options;
 using SDL.Configuration;
 using SDL.Models;
 
-namespace SDL.Services;
+namespace SDL.Services.Infrastructure;
+using SDL.Services.Downloading;
+using SDL.Services.Conversion;
+using SDL.Services.Archiving;
+using SDL.Services.Queues;
 
 public class VideoManagementService
 {

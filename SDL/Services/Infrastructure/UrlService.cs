@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 using SDL.Configuration;
 using SDL.Models;
 
-namespace SDL.Services;
+namespace SDL.Services.Infrastructure;
 
 public class UrlService : IUrlService
 {

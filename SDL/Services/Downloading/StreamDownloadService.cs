@@ -6,7 +6,10 @@ using SDL.Models;
 using CliWrap;
 using CliWrap.EventStream;
 
-namespace SDL.Services;
+namespace SDL.Services.Downloading;
+using SDL.Services.Queues;
+using SDL.Services.Infrastructure;
+using SDL.Services.Conversion;
 
 public partial class StreamDownloadService
 {

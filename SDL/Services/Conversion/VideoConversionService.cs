@@ -7,7 +7,9 @@ using CliWrap;
 using CliWrap.EventStream;
 using CliWrap.Buffered;
 
-namespace SDL.Services;
+namespace SDL.Services.Conversion;
+using SDL.Services.Queues;
+using SDL.Services.Infrastructure;
 
 public partial class VideoConversionService
 {

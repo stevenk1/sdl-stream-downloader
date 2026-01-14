@@ -1,6 +1,9 @@
 using SDL.Models;
 
-namespace SDL.Services;
+namespace SDL.Services.Archiving;
+using SDL.Services.Queues;
+using SDL.Services.Downloading;
+using SDL.Services.Infrastructure;
 
 public class ArchiveBackgroundService : BackgroundService
 {

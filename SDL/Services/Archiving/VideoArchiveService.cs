@@ -3,7 +3,9 @@ using Microsoft.Extensions.Options;
 using SDL.Configuration;
 using SDL.Models;
 
-namespace SDL.Services;
+namespace SDL.Services.Archiving;
+using SDL.Services.Conversion;
+using SDL.Services.Infrastructure;
 
 public class VideoArchiveService
 {

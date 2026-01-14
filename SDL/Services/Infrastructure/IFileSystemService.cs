@@ -1,4 +1,4 @@
-namespace SDL.Services;
+namespace SDL.Services.Infrastructure;
 
 public interface IFileSystemService
 {

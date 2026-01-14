@@ -1,6 +1,8 @@
 using SDL.Models;
 
-namespace SDL.Services;
+namespace SDL.Services.Downloading;
+using SDL.Services.Queues;
+using SDL.Services.Infrastructure;
 
 public class DownloadBackgroundService : BackgroundService
 {

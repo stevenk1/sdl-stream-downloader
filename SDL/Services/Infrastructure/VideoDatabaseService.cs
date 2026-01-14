@@ -4,7 +4,7 @@ using SDL.Configuration;
 using SDL.Models;
 using System.Text.Json;
 
-namespace SDL.Services;
+namespace SDL.Services.Infrastructure;
 
 public class VideoDatabaseService : IDisposable
 {
