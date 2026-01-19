@@ -142,6 +142,7 @@
                                                  Icon="@Icons.Material.Filled.HighQuality"
                                                  Color="Color.Default"
                                                  Size="Size.Small"
+                                                 Class="status-badge"
                                                  Style="background: rgba(255, 255, 255, 0.1); border-radius: 8px;">
                                             @job.Resolution
                                         </MudChip>
@@ -149,8 +150,9 @@
                                                  Icon="@GetStatusIcon(job.Status)"
                                                  Color="GetStatusColor(job.Status)"
                                                  Size="Size.Small"
+                                                 Class="status-badge"
                                                  Style="border-radius: 8px; font-weight: 500;">
-                                            @job.Status.ToString()
+                                            @FormatStatus(job.Status.ToString())
                                         </MudChip>
                                     </MudStack>
                                 </MudStack>
@@ -266,17 +268,20 @@
                              Class="modern-card">
                         <MudCardContent Style="padding: 24px;">
                             <MudStack Spacing="3">
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudStack Spacing="1" Style="flex: 1;">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="card-header">
+                                    <MudStack Spacing="1" Style="flex: 1;" Class="card-title-section">
                                         <MudText Typo="Typo.h6" Style="font-weight: 600;">@job.Title</MudText>
                                     </MudStack>
-                                    <MudChip T="string"
-                                             Icon="@GetConversionStatusIcon(job.Status)"
-                                             Color="GetConversionStatusColor(job.Status)"
-                                             Size="Size.Small"
-                                             Style="border-radius: 8px; font-weight: 500;">
-                                        @job.Status.ToString()
-                                    </MudChip>
+                                    <MudStack Row="true" Spacing="2" Class="card-chips">
+                                        <MudChip T="string"
+                                                 Icon="@GetConversionStatusIcon(job.Status)"
+                                                 Color="GetConversionStatusColor(job.Status)"
+                                                 Size="Size.Small"
+                                                 Class="status-badge"
+                                                 Style="border-radius: 8px; font-weight: 500;">
+                                            @FormatStatus(job.Status.ToString())
+                                        </MudChip>
+                                    </MudStack>
                                 </MudStack>
 
                                 @if (job.Status == ConversionStatus.Converting)
@@ -356,8 +361,8 @@
                              Class="modern-card">
                         <MudCardContent Style="padding: 24px;">
                             <MudStack Spacing="3">
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex: 1;">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="card-header">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex: 1;" Class="card-title-section">
                                         @if (!string.IsNullOrEmpty(job.Thumbnail) || job.Thumbnails?.Any() == true)
                                         {
                                             <div @onclick="() => ShowThumbnailGalleryForJob(job)"
@@ -383,13 +388,16 @@
                                             <MudText Typo="Typo.body2" Style="opacity: 0.7; font-size: 0.875rem;">@job.Url</MudText>
                                         </MudStack>
                                     </MudStack>
-                                    <MudChip T="string"
-                                             Icon="@GetStatusIcon(job.Status)"
-                                             Color="GetStatusColor(job.Status)"
-                                             Size="Size.Small"
-                                             Style="border-radius: 8px; font-weight: 500;">
-                                        @job.Status.ToString()
-                                    </MudChip>
+                                    <MudStack Row="true" Spacing="2" Class="card-chips">
+                                        <MudChip T="string"
+                                                 Icon="@GetStatusIcon(job.Status)"
+                                                 Color="GetStatusColor(job.Status)"
+                                                 Size="Size.Small"
+                                                 Class="status-badge"
+                                                 Style="border-radius: 8px; font-weight: 500;">
+                                            @FormatStatus(job.Status.ToString())
+                                        </MudChip>
+                                    </MudStack>
                                 </MudStack>
 
                                 @if (!string.IsNullOrEmpty(job.ErrorMessage))
@@ -585,6 +593,18 @@
         transform: scale(1.1);
     }
 
+    .status-badge {
+        height: 28px !important;
+        font-weight: 600 !important;
+        padding: 0 12px !important;
+        letter-spacing: 0.01em;
+    }
+
+    .status-badge .mud-chip-icon {
+        margin-inline-start: -4px !important;
+        margin-inline-end: 4px !important;
+    }
+
     .thumbnail-clickable:hover {
         transform: scale(1.05);
         border-color: #7e6fff !important;
@@ -657,6 +677,18 @@
         .card-chips {
             width: 100%;
             flex-wrap: wrap;
+            gap: 8px !important;
+        }
+
+        .status-badge {
+            height: 24px !important;
+            font-size: 0.75rem !important;
+            padding: 0 8px !important;
+        }
+
+        .status-badge .mud-chip-icon {
+            font-size: 1rem !important;
+            margin-inline-end: 2px !important;
         }
 
         .card-url {
@@ -725,6 +757,20 @@
 
         .card-content {
             padding: 12px !important;
+        }
+
+        .status-badge {
+            height: 20px !important;
+            font-size: 0.7rem !important;
+            padding: 0 6px !important;
+        }
+
+        .status-badge .mud-chip-icon {
+            font-size: 0.875rem !important;
+        }
+
+        .card-chips {
+            gap: 4px !important;
         }
 
         /* Further reduce text sizes */
@@ -976,6 +1022,13 @@
                 Snackbar.Add($"Failed to delete job: {ex.Message}", Severity.Error);
             }
         }
+    }
+
+    private string FormatStatus(string status)
+    {
+        if (string.IsNullOrEmpty(status)) return status;
+        // Add spaces before capital letters (e.g., "ConversionCompleted" -> "Conversion Completed")
+        return System.Text.RegularExpressions.Regex.Replace(status, "([a-z])([A-Z])", "$1 $2");
     }
 
     private Color GetStatusColor(DownloadStatus status) => status switch
