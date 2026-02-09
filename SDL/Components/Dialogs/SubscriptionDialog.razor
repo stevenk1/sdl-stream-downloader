@@ -1,0 +1,50 @@
+@using SDL.Models
+@using SDL.Services.Infrastructure
+@using MudBlazor
+@inject VideoDatabaseService Db
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudStack Spacing="4">
+                <MudTextField T="string" Label="Name" @bind-Value="Subscription.Name" Required="true" RequiredError="Name is required" Variant="Variant.Outlined" />
+                <MudTextField T="string" Label="Stream URL" @bind-Value="Subscription.Url" Required="true" RequiredError="URL is required" Variant="Variant.Outlined" />
+                <MudNumericField T="int" Label="Check Rate (minutes)" @bind-Value="Subscription.CheckRateMinutes" Min="1" Max="1440" Required="true" Variant="Variant.Outlined" />
+                <MudSelect T="string" Label="Resolution" @bind-Value="Subscription.Resolution" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("Best")">Best</MudSelectItem>
+                    <MudSelectItem Value="@("1080p")">1080p</MudSelectItem>
+                    <MudSelectItem Value="@("720p")">720p</MudSelectItem>
+                    <MudSelectItem Value="@("480p")">480p</MudSelectItem>
+                    <MudSelectItem Value="@("360p")">360p</MudSelectItem>
+                </MudSelect>
+                <MudCheckBox T="bool" Label="Enabled" @bind-Value="Subscription.IsEnabled" Color="Color.Primary" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="!_isValid">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Subscription Subscription { get; set; } = new();
+
+    private MudForm _form = default!;
+    private bool _isValid;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (_form.IsValid)
+        {
+            Db.UpsertSubscription(Subscription);
+            Snackbar.Add("Subscription saved", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+    }
+}

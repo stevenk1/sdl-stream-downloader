@@ -1,0 +1,162 @@
+@page "/subscriptions"
+@using SDL.Models
+@using SDL.Services.Infrastructure
+@using SDL.Services.Downloading
+@using SDL.Components.Dialogs
+@inject VideoDatabaseService Db
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Subscriptions</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge">
+    <MudPaper Elevation="0" Class="pa-8 mb-8" Style="background: linear-gradient(135deg, rgba(255, 64, 129, 0.1) 0%, rgba(126, 111, 255, 0.1) 100%); border-radius: 24px; border: 1px solid rgba(255, 64, 129, 0.2);">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #ff4081 0%, #7e6fff 100%); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(255, 64, 129, 0.4);">
+                    <MudIcon Icon="@Icons.Material.Filled.Subscriptions" Size="Size.Large" Style="color: white;"/>
+                </div>
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4" Style="font-weight: 700;">Subscriptions</MudText>
+                    <MudText Typo="Typo.body1" Style="opacity: 0.8;">Automatically check and capture streams when they go live</MudText>
+                </MudStack>
+            </MudStack>
+            <MudStack Row="true" Spacing="3">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Secondary"
+                           Href="/downloads"
+                           StartIcon="@Icons.Material.Filled.CloudDownload"
+                           Style="border-radius: 12px;
+                                  padding: 12px 24px;
+                                  background: linear-gradient(135deg, #7e6fff 0%, #3a86ff 100%);
+                                  box-shadow: 0 8px 24px rgba(126, 111, 255, 0.3);
+                                  transition: all 0.3s ease;
+                                  font-weight: 600;">
+                    Downloads
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddDialog"
+                           Style="border-radius: 12px;
+                                  padding: 12px 24px;
+                                  font-weight: 600;">
+                    Add Subscription
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudTable Items="_subscriptions" Hover="true" Elevation="0" Class="rounded-xl border" HeaderClass="rounded-t-xl">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>URL</MudTh>
+            <MudTh>Check Rate</MudTh>
+            <MudTh>Resolution</MudTh>
+            <MudTh>Last Checked</MudTh>
+            <MudTh>Last Triggered</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align: right;">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="URL">
+                <MudLink href="@context.Url" Target="_blank" MaxWidth="200px" Class="text-truncate">@context.Url</MudLink>
+            </MudTd>
+            <MudTd DataLabel="Check Rate">@context.CheckRateMinutes min</MudTd>
+            <MudTd DataLabel="Resolution">@context.Resolution</MudTd>
+            <MudTd DataLabel="Last Checked">@(context.LastCheckedAt?.ToString("g") ?? "Never")</MudTd>
+            <MudTd DataLabel="Last Triggered">@(context.LastTriggeredAt?.ToString("g") ?? "Never")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudSwitch Value="@context.IsEnabled" ValueChanged="@((bool val) => ToggleSubscription(context, val))" Color="@(context.IsEnabled ? Color.Success : Color.Default)" Label="@(context.IsEnabled ? "Enabled" : "Disabled")" />
+            </MudTd>
+            <MudTd DataLabel="Actions" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Info" OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteSubscription(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Typo="Typo.body1" Class="pa-4 text-center">No subscriptions found. Click 'Add Subscription' to create one.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<Subscription> _subscriptions = new();
+
+    protected override void OnInitialized()
+    {
+        LoadSubscriptions();
+    }
+
+    private void LoadSubscriptions()
+    {
+        _subscriptions = Db.GetAllSubscriptions().ToList();
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var parameters = new DialogParameters<SubscriptionDialog>();
+        parameters.Add(x => x.Subscription, new Subscription());
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<SubscriptionDialog>("Add Subscription", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            LoadSubscriptions();
+        }
+    }
+
+    private async Task OpenEditDialog(Subscription sub)
+    {
+        var parameters = new DialogParameters<SubscriptionDialog>();
+        // Create a copy to avoid editing the list directly before saving
+        var copy = new Subscription
+        {
+            Id = sub.Id,
+            Url = sub.Url,
+            Name = sub.Name,
+            CheckRateMinutes = sub.CheckRateMinutes,
+            Resolution = sub.Resolution,
+            IsEnabled = sub.IsEnabled,
+            LastCheckedAt = sub.LastCheckedAt,
+            LastTriggeredAt = sub.LastTriggeredAt,
+            CreatedAt = sub.CreatedAt
+        };
+        parameters.Add(x => x.Subscription, copy);
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<SubscriptionDialog>("Edit Subscription", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            LoadSubscriptions();
+        }
+    }
+
+    private void ToggleSubscription(Subscription sub, bool isEnabled)
+    {
+        sub.IsEnabled = isEnabled;
+        Db.UpsertSubscription(sub);
+        Snackbar.Add($"Subscription {(isEnabled ? "enabled" : "disabled")}", isEnabled ? Severity.Success : Severity.Info);
+        LoadSubscriptions();
+    }
+
+    private async Task DeleteSubscription(Subscription sub)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Delete Subscription", 
+            $"Are you sure you want to delete the subscription for '{sub.Name}'?", 
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (result == true)
+        {
+            Db.DeleteSubscription(sub.Id);
+            Snackbar.Add("Subscription deleted", Severity.Success);
+            LoadSubscriptions();
+        }
+    }
+}

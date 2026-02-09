@@ -23,6 +23,7 @@ builder.Services.Configure<VideoStorageSettings>(
 // Add application services
 builder.Services.AddSingleton<IFileSystemService, PhysicalFileSystemService>();
 builder.Services.AddSingleton<IUrlService, UrlService>();
+builder.Services.AddSingleton<IStreamCheckService, StreamCheckService>();
 builder.Services.AddSingleton<VideoDatabaseService>();
 
 // Register task queues
@@ -39,6 +40,7 @@ builder.Services.AddSingleton<VideoManagementService>();
 builder.Services.AddHostedService<DownloadBackgroundService>();
 builder.Services.AddHostedService<ConversionBackgroundService>();
 builder.Services.AddHostedService<ArchiveBackgroundService>();
+builder.Services.AddHostedService<SubscriptionBackgroundService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

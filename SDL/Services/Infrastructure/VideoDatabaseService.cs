@@ -16,6 +16,7 @@ public class VideoDatabaseService : IDisposable
     private readonly ILiteCollection<DownloadJob> _downloads;
     private readonly ILiteCollection<ConversionJob> _conversions;
     private readonly ILiteCollection<ArchivedVideo> _archives;
+    private readonly ILiteCollection<Subscription> _subscriptions;
 
     public VideoDatabaseService(
         IOptions<VideoStorageSettings> settings,
@@ -35,6 +36,7 @@ public class VideoDatabaseService : IDisposable
         _downloads = _db.GetCollection<DownloadJob>("downloads");
         _conversions = _db.GetCollection<ConversionJob>("conversions");
         _archives = _db.GetCollection<ArchivedVideo>("archives");
+        _subscriptions = _db.GetCollection<Subscription>("subscriptions");
 
         // Create indexes for common queries
         _downloads.EnsureIndex(x => x.Status);
@@ -43,6 +45,7 @@ public class VideoDatabaseService : IDisposable
         _conversions.EnsureIndex(x => x.DownloadJobId);
         _archives.EnsureIndex(x => x.ArchivedAt);
         _archives.EnsureIndex(x => x.Title);
+        _subscriptions.EnsureIndex(x => x.Url);
 
         // Migrate existing JSON data on first run
         MigrateFromJson();
@@ -184,6 +187,12 @@ public class VideoDatabaseService : IDisposable
     }
 
     public int GetArchivedVideoCount() => _archives.Count();
+
+    // Subscription methods
+    public Subscription? GetSubscription(string id) => _subscriptions.FindById(id);
+    public IEnumerable<Subscription> GetAllSubscriptions() => _subscriptions.FindAll();
+    public void UpsertSubscription(Subscription subscription) => _subscriptions.Upsert(subscription);
+    public bool DeleteSubscription(string id) => _subscriptions.Delete(id);
 
     // Transaction support
     public void BeginTransaction() => _db.BeginTrans();
